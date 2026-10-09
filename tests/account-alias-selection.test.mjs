@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { SqliteDatabase } from "./helpers/d1-sqlite.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const directory = mkdtempSync(join(root, "node_modules", "mailflare-account-test-"));
@@ -11,7 +12,6 @@ after(() => rmSync(directory, { recursive: true, force: true }));
 await build({
 	stdin: {
 		contents: `
-			export { SqliteDatabase } from "./server/runtime/sqlite-database.ts";
 			export { applyMigrations } from "./server/runtime/migrate.ts";
 			export { getDb } from "./src/db/index.ts";
 			export { createSession } from "./src/lib/auth/session.ts";
@@ -38,14 +38,15 @@ await build({
 	logLevel: "silent",
 });
 const {
-	SqliteDatabase, applyMigrations, getDb, createSession, generateApiKey, createUserAccountSchema,
+	applyMigrations, getDb, createSession, generateApiKey, createUserAccountSchema,
 	dashboardCreate, apiCreate, registerAdminMcpTools, getMailboxDomainAddresses, resolveInboundAddress, getAuthorizedSenderAddress,
 } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 const key = generateApiKey();
 
 async function fixture(t, { rules = [], failAddress, slowAddress } = {}) {
-	const database = new SqliteDatabase(":memory:");
+	const database = new SqliteDatabase(":memory:", { forbidLicenseQueries: true });
 	t.after(() => database.db.close());
+	t.after(() => assert.equal(database.forbiddenQueries.length, 0, "account runtime must not consult licenses"));
 	await applyMigrations(database, join(root, "drizzle/migrations"));
 	database.db.exec(`
 		INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES
@@ -56,9 +57,9 @@ async function fixture(t, { rules = [], failAddress, slowAddress } = {}) {
 			('two', 'admin', 'two.test', 'zone-two', 'active', 1),
 			('pending', 'admin', 'pending.test', 'zone-pending', 'pending', 1),
 			('foreign', 'other', 'foreign.test', 'zone-foreign', 'active', 1);
-		INSERT INTO license_settings (id, instance_id, plan, state, features, updated_at)
-			VALUES ('default', 'test-instance', 'team', 'active', '[]', 1);
+		UPDATE users SET is_primary_admin = 1, can_manage_users = 1, can_manage_domains = 1 WHERE id = 'admin';
 	`);
+	assert.equal(database.db.prepare("SELECT count(*) AS count FROM license_settings").get().count, 0);
 	database.db.prepare("INSERT INTO api_keys (id, user_id, name, prefix, key_hash, scopes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
 		.run("key", "admin", "Test", key.prefix, key.hash, '["accounts"]', 1);
 	const env = { DB: database, CF_TOKEN: "test-only", MAILFLARE_RUNTIME: "node" };
@@ -232,28 +233,13 @@ for (const enabled of [true, false]) {
 	});
 }
 
-test("account creation still enforces admin authorization and the Team license", async (t) => {
+test("account creation requires admin authorization and works with no license record", async (t) => {
 	const f = await fixture(t);
 	assert.equal((await f.post("api", {}, "invalid-test-key")).status, 401);
 	assert.equal((await f.post("dashboard", {}, "invalid-test-session")).status, 403);
-	f.database.db.exec("UPDATE license_settings SET state = 'inactive'");
-	assert.equal((await f.post("api")).status, 403);
-	assert.equal((await f.post("dashboard")).status, 403);
 	assert.equal(f.calls.length, 0);
-});
-
-test("a Pro license creates accounts only while seats remain; Team and unlimited Pro have no limit", async (t) => {
-	const f = await fixture(t);
-	const users = () => f.database.db.prepare("SELECT count(*) AS count FROM users WHERE disabled = 0").get().count;
-	f.database.db.exec(`UPDATE license_settings SET plan = 'pro', seat_limit = ${users()}`);
-	assert.equal((await f.post("api")).status, 403, "no seat left");
-	f.database.db.exec(`UPDATE license_settings SET seat_limit = ${users() + 1}`);
-	assert.equal((await f.post("api", { username: "seat-one" })).status, 201);
-	assert.equal((await f.post("api", { username: "seat-two" })).status, 403, "seat just used");
-	f.database.db.exec("UPDATE license_settings SET seat_limit = NULL");
-	assert.equal((await f.post("api", { username: "seat-three" })).status, 201);
-	f.database.db.exec("UPDATE license_settings SET plan = 'team', seat_limit = 1");
-	assert.equal((await f.post("api", { username: "seat-four" })).status, 201);
+	assert.equal((await f.post("api", { username: "api-user", useAllDomains: false })).status, 201);
+	assert.equal((await f.post("dashboard", { username: "dashboard-user", useAllDomains: false })).status, 201);
 });
 
 for (const separateDomains of [false, true]) {

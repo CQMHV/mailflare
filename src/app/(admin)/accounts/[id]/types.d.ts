@@ -9,7 +9,6 @@ export type ManagedAccount = {
 	canManageDomains: boolean;
 	canManageUsers: boolean;
 	forwardingEmail: string | null;
-	canForwardEmail: boolean;
 	hasAvatar: boolean;
 	/** Whether the signed-in admin may modify this account. */
 	editable: boolean;

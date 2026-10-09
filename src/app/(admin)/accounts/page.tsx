@@ -13,7 +13,6 @@ import { Select } from "@/components/ui/select";
 import { authFetch } from "@/lib/auth/client";
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import { getAvatarColorStyle } from "@/lib/avatar-colors";
-import { LicenseRequiredOverlay } from "@/components/license-required-overlay";
 import { List, ListRow } from "@/components/ui/list";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { defaultTranslator } from "@/lib/i18n/utils";
@@ -44,19 +43,15 @@ export default function AccountsPage() {
 	const [saving, setSaving] = useState(false);
 	const [createOpen, setCreateOpen] = useState(false);
 	const [message, setMessage] = useState<string | null>(null);
-	const [seats, setSeats] = useState<AccountResponse["seats"] | null>(null);
-	const [teamRequired, setTeamRequired] = useState(false);
 
 	async function loadAccounts() {
 		const data = await fetchAccounts();
 		setAccounts(data.accounts ?? []);
-		setSeats(data.seats ?? null);
 	}
 
 	useEffect(() => {
 		fetchAccounts().then(async (list) => {
 			setAccounts(list.accounts ?? []);
-			setSeats(list.seats ?? null);
 			const response = await authFetch("/api/domains");
 			const data = (await response.json()) as { domains?: Domain[]; error?: string };
 			if (!response.ok) throw new Error(data.error ?? t("accounts.domainsFailed"));
@@ -64,7 +59,6 @@ export default function AccountsPage() {
 			setDomainId(data.domains?.[0]?.id ?? "");
 		}).catch((error) => {
 			const text = error instanceof Error ? error.message : t("accounts.loadFailed");
-			setTeamRequired(/(pro|team) license/i.test(text) && !/seats/i.test(text));
 			setMessage(text);
 		}).finally(() => setLoading(false));
 	}, []);
@@ -94,11 +88,10 @@ export default function AccountsPage() {
 		}
 	}
 
-	const seatsFull = !!seats && seats.limit !== null && seats.used >= seats.limit;
-
 	return <div className="space-y-6">
-		<div className="flex items-center justify-between gap-4"><div><h1 className="text-2xl md:text-3xl font-medium text-neutral-900">{t("accounts.title")}</h1><p className="mt-2 text-sm text-neutral-500">{t("accounts.description")}</p>{seats && seats.limit !== null && <p className={`mt-1 text-sm ${seatsFull ? "text-amber-700" : "text-neutral-500"}`}>{t("accounts.seatsUsed", { used: seats.used, limit: seats.limit })}{seatsFull ? ` ${t("accounts.seatsFull")}` : ""}</p>}</div>{!teamRequired && canManage && <Button disabled={seatsFull} className={mobilePrimaryActionClass} onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" />{t("accounts.new")}</Button>}</div>
-		<div className="relative">{teamRequired && <LicenseRequiredOverlay required="Pro or Team"><div className="min-h-48 rounded-3xl bg-white" /></LicenseRequiredOverlay>}<List>
+		<div className="flex items-center justify-between gap-4"><div><h1 className="text-2xl md:text-3xl font-medium text-neutral-900">{t("accounts.title")}</h1><p className="mt-2 text-sm text-neutral-500">{t("accounts.description")}</p></div>{canManage && <Button className={mobilePrimaryActionClass} onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" />{t("accounts.new")}</Button>}</div>
+		{message && !createOpen && <p className="text-sm text-red-600">{message}</p>}
+		<List>
 			{loading && <p className="text-sm text-neutral-500">{t("common.loading")}</p>}
 			{accounts.map((account) => {
 				const locked = !currentUser?.isPrimaryAdmin && account.role === "admin" && account.id !== currentUser?.id;
@@ -111,7 +104,7 @@ export default function AccountsPage() {
 				}
 				return <ListRow key={account.id} asChild><Link href={`/accounts/${account.id}`}>{row}</Link></ListRow>;
 			})}
-		</List></div>
+		</List>
 		<Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent className="max-h-[calc(100dvh-4rem)] w-[min(640px,calc(100vw-32px))] overflow-y-auto"><DialogHeader><DialogTitle>{t("accounts.addTitle")}</DialogTitle><DialogDescription>{t("accounts.addDescription")}</DialogDescription></DialogHeader><form onSubmit={createAccount}><fieldset disabled={saving} className="space-y-4">
 			<div className="space-y-2"><Label htmlFor="account-username">{t("auth.email")}</Label><div className="flex h-10 overflow-hidden rounded-md border border-neutral-200 bg-white"><Input id="account-username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder={t("accounts.username")} className="min-w-0 flex-1 rounded-none border-0 shadow-none" required /><span className="flex items-center text-sm text-neutral-400">@</span><Select aria-label={t("accounts.domain")} value={domainId} onChange={(event) => setDomainId(event.target.value)} containerClassName="min-w-0 max-w-[55%] shrink-0 rounded-none border-0 px-0" className="bg-transparent px-3 text-sm" required><option value="">{t("accounts.selectDomain")}</option>{domains.map((domain) => <option key={domain.id} value={domain.id}>{domain.hostname}</option>)}</Select></div></div>
 			<div className="space-y-2"><Label htmlFor="account-password">{t("auth.password")}</Label><Input id="account-password" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></div>

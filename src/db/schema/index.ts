@@ -697,6 +697,8 @@ export const appSettings = sqliteTable("app_settings", {
 		.$defaultFn(() => new Date()),
 });
 
+// Historical metadata retained so existing full backups remain restorable.
+// Application features do not read this table or depend on license activation.
 export const licenseSettings = sqliteTable("license_settings", {
 	id: text("id").primaryKey(),
 	instanceId: text("instance_id").notNull().unique(),
@@ -707,7 +709,7 @@ export const licenseSettings = sqliteTable("license_settings", {
 		.notNull()
 		.default("inactive"),
 	features: text("features").notNull().default("[]"),
-	// Account seats from Paymug's seatLimit; null is unlimited. Rows predating seats keep one.
+	// Preserve the historical column format for backup compatibility only.
 	seatLimit: integer("seat_limit").default(1),
 	activatedAt: integer("activated_at", { mode: "timestamp" }),
 	validatedAt: integer("validated_at", { mode: "timestamp" }),

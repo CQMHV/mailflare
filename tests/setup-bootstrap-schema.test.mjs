@@ -1,77 +1,116 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import test from "node:test";
+import { tmpdir } from "node:os";
+import test, { after } from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { build } from "esbuild";
+import { SqliteDatabase } from "./helpers/d1-sqlite.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const src = readFileSync(join(root, "src/lib/setup/migration.ts"), "utf8");
+const directory = mkdtempSync(join(tmpdir(), "mailflare-setup-test-"));
+after(() => rmSync(directory, { recursive: true, force: true }));
 
-function migrationNames() {
-	const match = src.match(/const MIGRATION_NAMES = \[([\s\S]*?)\];/);
-	assert.ok(match, "MIGRATION_NAMES array not found");
-	return [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1]);
+// Execute the real generator with its only write captured in memory. The tests
+// also work in a clean checkout, where the generated migration bundle is absent.
+const generatorPath = join(root, "scripts/generate-migration-bundle.mjs");
+const generator = await build({
+	entryPoints: [generatorPath], bundle: true, platform: "node", format: "cjs", write: false,
+	define: { "import.meta.url": JSON.stringify(pathToFileURL(generatorPath).href) }, logLevel: "silent",
+});
+let migrationBundle;
+runInNewContext(generator.outputFiles[0].text, {
+	URL,
+	require(name) {
+		assert.equal(name, "node:fs");
+		return {
+			readFileSync, readdirSync,
+			writeFileSync(path, contents) {
+				assert.equal(path.href, pathToFileURL(join(root, "src/lib/migrations/bundle.json")).href);
+				assert.equal(migrationBundle, undefined, "generator should emit exactly one bundle");
+				migrationBundle = contents;
+			},
+		};
+	},
+});
+assert.ok(migrationBundle);
+await build({
+	stdin: {
+		contents: `
+			export { migrateCleanDatabase } from "./src/lib/setup/migration.ts";
+			export { getMigrationStatus } from "./src/lib/migrations/service.ts";
+			export { exportDatabaseRecords, restoreDatabaseRecords } from "./src/lib/backups/export.ts";
+		`,
+		resolveDir: root, sourcefile: "setup-schema-test-entry.ts",
+	},
+	outfile: join(directory, "entry.mjs"), bundle: true, platform: "node", format: "esm",
+	target: "node24", tsconfig: join(root, "tsconfig.json"), logLevel: "silent",
+	plugins: [{
+		name: "in-memory-migration-bundle",
+		setup(builder) {
+			builder.onResolve({ filter: /^\.\/bundle\.json$/ }, args => {
+				if (args.importer.replaceAll("\\", "/").endsWith("/src/lib/migrations/service.ts")) {
+					return { path: "migration-bundle", namespace: "test-migrations" };
+				}
+			});
+			builder.onLoad({ filter: /.*/, namespace: "test-migrations" }, () => ({ contents: migrationBundle, loader: "json" }));
+		},
+	}],
+});
+const { migrateCleanDatabase, getMigrationStatus, exportDatabaseRecords, restoreDatabaseRecords } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
+
+function database(t) {
+	const db = new SqliteDatabase();
+	t.after(() => db.db.close());
+	return db;
 }
 
-function initialSchemaSql() {
-	const match = src.match(/const INITIAL_SCHEMA_SQL = `([\s\S]*?)`;/);
-	assert.ok(match, "INITIAL_SCHEMA_SQL not found");
-	return match[1];
-}
-
-test("bootstrap records migrations represented in the current schema so later deploys do not re-apply them", () => {
-	const names = migrationNames();
-	for (const name of [
-		"0013_add_license_settings.sql",
-		"0021_add_mailbox_signature.sql",
-		"0022_add_mailbox_auto_reply.sql",
-		"0027_add_domain_sending_intent.sql",
-		"0029_add_spam_protection.sql",
-	]) {
-		assert.ok(names.includes(name), `MIGRATION_NAMES is missing ${name}`);
-	}
+test("real bootstrap applies every committed migration once and reports a ready current schema", async t => {
+	const db = database(t);
+	assert.equal(await migrateCleanDatabase(db), true);
+	const expected = readdirSync(join(root, "drizzle/migrations")).filter(name => name.endsWith(".sql")).sort();
+	assert.deepEqual(db.db.prepare("SELECT name FROM d1_migrations ORDER BY name").all().map(row => row.name), expected);
+	assert.deepEqual(await getMigrationStatus(db), { ready: true, pending: [], unknown: [] });
+	assert.equal(await migrateCleanDatabase(db), false);
+	assert.equal(db.db.prepare("SELECT count(*) AS count FROM d1_migrations").get().count, expected.length);
+	assert.deepEqual(db.db.prepare("PRAGMA foreign_key_check").all(), []);
 });
 
-test("fresh bootstrap schema accepts the current Drizzle mailbox and license inserts", () => {
-	const sql = initialSchemaSql();
-	const mailboxCreate = sql.match(/CREATE TABLE IF NOT EXISTS mailboxes \(([\s\S]*?)\);/);
-	assert.ok(mailboxCreate, "mailboxes CREATE TABLE not found");
-	assert.match(mailboxCreate[1], /\bsignature\b/);
-	assert.match(mailboxCreate[1], /\bauto_reply_enabled\b/);
-	assert.match(mailboxCreate[1], /\bauto_reply_subject\b/);
-	assert.match(mailboxCreate[1], /\bauto_reply_body\b/);
-	assert.match(sql, /CREATE TABLE IF NOT EXISTS license_settings \(/);
-	assert.match(sql, /CREATE TABLE IF NOT EXISTS auto_reply_deliveries \(/);
-	assert.match(sql, /\bspam_protection_enabled\b/);
-	assert.match(sql, /CREATE TABLE IF NOT EXISTS spam_token_stats \(/);
-	assert.match(sql, /CREATE TABLE IF NOT EXISTS spam_reputation \(/);
-	assert.match(sql, /CREATE TABLE IF NOT EXISTS spam_feedback \(/);
-	const domainCreate = sql.match(/CREATE TABLE IF NOT EXISTS domains \(([\s\S]*?)\);/);
-	assert.ok(domainCreate, "domains CREATE TABLE not found");
-	assert.match(domainCreate[1], /\bsending_requested\b/);
+test("fresh setup accepts current mailbox data and preserves historical license rows through full backup restore", async t => {
+	const db = database(t);
+	await migrateCleanDatabase(db);
+	db.db.exec(`
+		INSERT INTO users (id,email,password_hash,name,created_at) VALUES ('u','a@example.com','hash','Member',1);
+		INSERT INTO domains (id,user_id,hostname,zone_id,sending_requested,created_at) VALUES ('d','u','example.com','manual',1,1);
+		INSERT INTO mailboxes (id,user_id,domain_id,local_part,display_name,signature,auto_reply_enabled,auto_reply_subject,auto_reply_body,created_at)
+			VALUES ('m','u','d','a','Member','Signature',1,'Out of office','Reply body',1);
+		INSERT INTO license_settings (id,instance_id,plan,state,seat_limit,updated_at) VALUES ('default','legacy-instance','pro','inactive',1,1);
+		INSERT INTO auto_reply_deliveries (id,mailbox_id,recipient,sent_at) VALUES ('ar','m','sender@example.net',1);
+	`);
+	const bytes = await exportDatabaseRecords(db);
+	const document = JSON.parse(new TextDecoder().decode(bytes));
+	assert.ok(document.includedTables.includes("license_settings"));
+	assert.equal(document.tables.license_settings[0].instance_id, "legacy-instance");
+	const target = database(t);
+	await migrateCleanDatabase(target);
+	await restoreDatabaseRecords(target, bytes.buffer);
+	assert.equal(target.db.prepare("SELECT instance_id FROM license_settings WHERE id='default'").get().instance_id, "legacy-instance");
+	assert.equal(target.db.prepare("SELECT signature,auto_reply_body FROM mailboxes WHERE id='m'").get().auto_reply_body, "Reply body");
+	assert.equal(target.db.prepare("SELECT sending_requested FROM domains WHERE id='d'").get().sending_requested, 1);
+	assert.equal(target.db.prepare("SELECT count(*) AS count FROM auto_reply_deliveries").get().count, 1);
+	assert.deepEqual(target.db.prepare("PRAGMA foreign_key_check").all(), []);
+});
 
-	const py = `
-import sqlite3, sys
-sql = sys.stdin.read()
-db = sqlite3.connect(":memory:")
-for stmt in sql.split(";"):
-    s = stmt.strip()
-    if s:
-        db.execute(s)
-db.execute("INSERT INTO users (id,email,password_hash,name,created_at) VALUES ('u','a@b.c','x','n',1)")
-db.execute("INSERT INTO domains (id,user_id,hostname,zone_id,created_at) VALUES ('d','u','ex.com','z',1)")
-db.execute("""
-INSERT INTO mailboxes (
-  id, user_id, domain_id, local_part, display_name,
-  signature, auto_reply_enabled, auto_reply_subject, auto_reply_body, created_at
-) VALUES ('m','u','d','admin','admin','sig',0,'Out of office','',1)
-""")
-db.execute("INSERT INTO license_settings (id, instance_id, updated_at) VALUES ('default','inst',1)")
-db.execute("INSERT INTO auto_reply_deliveries (id, mailbox_id, recipient, sent_at) VALUES ('ar','m','x@y.z',1)")
-print("ok")
-`;
-	const result = spawnSync("python3", ["-c", py], { input: sql, encoding: "utf8" });
-	assert.equal(result.status, 0, result.stderr + result.stdout);
-	assert.match(result.stdout, /^ok$/m);
+test("D1 test adapter batch rolls back all earlier writes on SQL and foreign-key failures", async t => {
+	const db = database(t);
+	db.db.exec("CREATE TABLE parents (id TEXT PRIMARY KEY); CREATE TABLE children (id TEXT PRIMARY KEY,parent_id TEXT REFERENCES parents(id));");
+	for (const failing of [db.prepare("INSERT INTO children VALUES ('c','missing')"), db.prepare("INSERT INTO missing_table VALUES ('missing')")]) {
+		await assert.rejects(db.batch([db.prepare("INSERT INTO parents VALUES ('p')"), failing]));
+		assert.equal(db.db.prepare("SELECT count(*) AS count FROM parents").get().count, 0);
+		assert.equal(db.db.prepare("SELECT count(*) AS count FROM children").get().count, 0);
+	}
+	await db.batch([db.prepare("INSERT INTO parents VALUES ('p')"), db.prepare("INSERT INTO children VALUES ('c','p')")]);
+	assert.equal(db.db.prepare("SELECT count(*) AS count FROM children").get().count, 1);
+	assert.deepEqual(db.db.prepare("PRAGMA foreign_key_check").all(), []);
 });

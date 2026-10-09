@@ -48,6 +48,15 @@ export function PoweredBy({ className = "px-1" }: { className?: string }) {
         >
           Mailflare v{packageJson.version}
         </a>
+        {" · "}
+        <a
+          href="https://github.com/CQMHV/mailflare"
+          target="_blank"
+          className="hover:underline text-neutral-500"
+          rel="noreferrer"
+        >
+          Source (AGPL)
+        </a>
       </p>
 	);
 }

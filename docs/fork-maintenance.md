@@ -31,6 +31,17 @@ locally; they are not a public production Worker.
 - Include push subscriptions and Drive tables in complete database backups.
 - Keep custom domain, workers.dev, preview URL and dashboard secret settings
   explicit across deployments.
+- Remove commercial purchase/activation pages, upgrade prompts, Paymug runtime
+  integration and license-based account seat or feature restrictions. Existing
+  branding, account administration, shared mailboxes, forwarding and booking
+  host management use their existing role and ownership permissions.
+
+No commercial activation is required by this fork. The AGPL license and upstream
+copyright notices still apply. Historical `license_settings` schema, migrations
+and backup entries remain only to keep older full backups restorable; runtime
+features never query license state. No data migration or new cloud resource is
+needed. An upstream merge can reintroduce purchase UI or license conditions, so
+review those changes before updating this installation.
 
 ## Verify and deploy
 

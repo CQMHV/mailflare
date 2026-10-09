@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { domains, mailboxAccess, mailboxes } from "@/db/schema";
-import { isTeamMailboxSharingEnabled } from "@/lib/mailboxes/access-utils";
 import type { NewMessageNotification, AgentDraftNotification } from "./types";
 import { sendPushNotifications } from "@/lib/push/server";
 
@@ -32,7 +31,7 @@ export async function getMailboxNotificationUserIds(
 		.innerJoin(domains, eq(mailboxes.domainId, domains.id))
 		.where(eq(mailboxes.id, mailboxId))
 		.limit(1);
-	const sharedUserIds = mailboxRows[0]?.type === "shared" && await isTeamMailboxSharingEnabled(db)
+	const sharedUserIds = mailboxRows[0]?.type === "shared"
 		? (await db
 			.select({ userId: mailboxAccess.userId })
 			.from(mailboxAccess)

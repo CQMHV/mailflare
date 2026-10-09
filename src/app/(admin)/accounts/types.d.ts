@@ -40,7 +40,6 @@ export type Account = {
 
 export type AccountResponse = {
 	accounts?: Account[];
-	seats?: { limit: number | null; used: number };
 	account?: Account;
 	error?: string;
 };
