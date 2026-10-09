@@ -61,9 +61,27 @@ targeted suite is distinct from the full upstream test suite, which has known
 fixture failures and Windows SQLite teardown issues in the initial checkout.
 
 For Cloudflare Workers Builds, connect this repository to the **existing**
-`mailflare` Worker, choose production branch `main`, and use `npm run deploy:local`
-as the deployment command. Preserve existing bindings and Worker secrets. GitHub
-checks and the Cloudflare build log should both be reviewed after a deployment.
+`mailflare` Worker. The configured production connection uses:
+
+- Production branch: `main`; root directory: `/`.
+- Build command: `npm run test:fork && npm run build`.
+- Deploy command: `npx wrangler deploy`.
+- Build environment: `NODE_VERSION=24`; preview builds disabled.
+- Dedicated deployment token: `Mailflare Builds — CQMHV/mailflare`, stored only
+  in Cloudflare Builds and separate from the runtime `CF_TOKEN`.
+
+The deployment token has account-scoped Workers Scripts Edit, Queues Edit and
+Account Settings Read; Workers Routes Edit and Zone Read for `cqmhv.com`; and
+User Details Read and Memberships Read. It has no expiration. Temporary Workers
+CI Edit permission was removed after token registration. Preserve existing
+bindings and Worker secrets. This deploy command does not run remote database
+migrations or modify Email Routing rules.
+
+Cloudflare's generic token warning lists optional product permissions. Deploying
+with existing D1 and R2 bindings does not require direct database or bucket access
+under the [Workers permissions model](https://developers.cloudflare.com/workers/authorization/workers/#bindings).
+Provisioning or accessing those resources directly would need separate permissions.
+GitHub checks and the Cloudflare build log should both be reviewed after a deployment.
 
 ## Update upstream without dropping fork changes
 
