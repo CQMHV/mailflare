@@ -2,7 +2,9 @@ import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, D
 import { mergeLegacyMessageBodies } from "./utils";
 import { BACKUP_TABLE_GROUPS, getSelectedBackupTables } from "./table-groups";
 
-const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", 'ai_usage'];
+const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "push_subscriptions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", 'ai_usage', "drive_items", "drive_upload_parts", "drive_shares"];
+/** Tables absent from supported older schemas; never discard their saved rows. */
+const OPTIONAL_SCHEMA_TABLES: DatabaseBackupTable[] = ["shared_attachment_links", "booking_events", "push_subscriptions", "drive_items", "drive_upload_parts", "drive_shares"];
 /**
  * Tables every backup document must contain. Tables added to BACKUP_TABLES
  * after the format shipped are absent from older documents, so they stay
@@ -62,7 +64,7 @@ export async function exportDatabaseRecords(db: D1Database, excludedGroups: Back
 	if (!includedTables.length) throw new Error("Select at least one backup table group");
 	const tables: DatabaseBackupDocument["tables"] = {};
 	for (const table of includedTables) {
-		if ((table === "shared_attachment_links" || table === "booking_events") && !databaseTables.has(table)) {
+		if (OPTIONAL_SCHEMA_TABLES.includes(table) && !databaseTables.has(table)) {
 			tables[table] = [];
 			continue;
 		}
@@ -79,13 +81,13 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	mergeLegacyMessageBodies(document);
 	fillMissingBackupTables(document);
 	validateDatabaseBackup(document);
-	const sharedLinksTable = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'shared_attachment_links'").first<{ name: string }>();
-	if (!sharedLinksTable && document.tables.shared_attachment_links?.length) throw new Error("Apply pending database migrations before restoring shared attachment links.");
-	const bookingTable = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'booking_events'").first<{ name: string }>();
-	if (!bookingTable && document.tables.booking_events?.length) throw new Error("Apply pending database migrations before restoring booking events.");
-	const restoreTables = BACKUP_TABLES.filter((table) => (table !== "shared_attachment_links" || sharedLinksTable) && (table !== "booking_events" || bookingTable));
+	const databaseTables = new Set((await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all<{ name: string }>()).results.map((row) => row.name));
+	for (const table of OPTIONAL_SCHEMA_TABLES) {
+		if (!databaseTables.has(table) && document.tables[table]?.length) throw new Error(`Apply pending database migrations before restoring ${table}.`);
+	}
+	const restoreTables = BACKUP_TABLES.filter((table) => !OPTIONAL_SCHEMA_TABLES.includes(table) || databaseTables.has(table));
 	const userColumns = new Set((await db.prepare("PRAGMA table_info(users)").all<{ name: string }>()).results.map((column) => column.name));
-	const bookingColumns = bookingTable ? new Set((await db.prepare("PRAGMA table_info(booking_events)").all<{ name: string }>()).results.map((column) => column.name)) : null;
+	const bookingColumns = databaseTables.has("booking_events") ? new Set((await db.prepare("PRAGMA table_info(booking_events)").all<{ name: string }>()).results.map((column) => column.name)) : null;
 	for (const table of [...restoreTables].reverse()) await db.prepare(`DELETE FROM ${table}`).run();
 	for (const table of restoreTables) {
 		const rows = document.tables[table] ?? [];

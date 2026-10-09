@@ -14,11 +14,11 @@ import { removeMxRecords } from "@/lib/domains/mx-records";
 import { rollbackDomainProvisioning } from "@/lib/domains/rollback";
 import { ensureSendingSubdomain } from "@/lib/domains/sending-subdomain";
 
-/** Node/Docker has no Email Worker; a catch-all PUT to one 404s (CF 2016). */
+/** Node/Docker has no Email Worker; operators can also opt out of catch-all on Workers. */
 export function shouldBindEmailCatchAllToWorker(
-	env?: Pick<CloudflareEnv, "MAILFLARE_RUNTIME">,
+	env?: Pick<CloudflareEnv, "MAILFLARE_RUNTIME" | "MAILFLARE_CATCH_ALL">,
 ): boolean {
-	return !isNodeRuntime(env);
+	return !isNodeRuntime(env) && env?.MAILFLARE_CATCH_ALL !== false && env?.MAILFLARE_CATCH_ALL !== "false";
 }
 
 /**

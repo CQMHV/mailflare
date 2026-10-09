@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "npm run db:bundle && vite dev --port 3000",
     "build": "npm run db:bundle && vite build",
+    "test:fork": "node --test tests/provision-node-catchall.test.mjs tests/outbound-delivery.test.mjs tests/reply-own-alias.test.mjs tests/database-backup-coverage.test.mjs scripts/r2-snapshot/r2-snapshot.test.mjs scripts/r2-snapshot/verify-database.test.mjs",
     "build:next": "npm run db:bundle && MAILFLARE_RUNTIME=node next build",
     "start": "vite preview --port 3000",
     "lint": "eslint .",

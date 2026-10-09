@@ -1,9 +1,20 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "mailflare",
+	"account_id": "ed7beef1c506866d938a47bc0e96047b",
+	"routes": [
+		{ "pattern": "mail.cqmhv.com", "custom_domain": true },
+	],
 	"main": "./worker.ts",
 	"compatibility_date": "2026-05-20",
 	"keep_vars": true,
+	"workers_dev": true,
+	"preview_urls": true,
+	"vars": {
+		"MAILFLARE_CATCH_ALL": false,
+		"CF_ACCOUNT_ID": "ed7beef1c506866d938a47bc0e96047b",
+		"APP_URL": "https://mail.cqmhv.com",
+	},
 	"compatibility_flags": [
 		"nodejs_compat",
 		"global_fetch_strictly_public"
@@ -65,11 +76,11 @@
 			"remote": false,
 		},
 	],
-	"ai": { "binding": "AI", "remote": true },
 	"d1_databases": [
 		{
 			"binding": "DB",
 			"database_name": "mailflare",
+			"database_id": "861ff749-44ca-4351-9693-fca6edb9f236",
 			"migrations_dir": "drizzle/migrations",
 		},
 	],

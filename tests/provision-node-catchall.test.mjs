@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import vm from "node:vm";
+import ts from "typescript";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -15,28 +17,43 @@ function stripComments(src) {
 	return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 }
 
-test("shouldBindEmailCatchAllToWorker inverts isNodeRuntime (issue #42)", () => {
-	const src = provisionSrc();
-	assert.match(
-		src,
-		/export function shouldBindEmailCatchAllToWorker\s*\(\s*env[^)]*\)[\s\S]*?\{\s*return !isNodeRuntime\(env\);\s*\}/,
-		"provision.ts must export shouldBindEmailCatchAllToWorker as !isNodeRuntime(env)",
-	);
+function loadCatchAllDecision() {
+	const context = vm.createContext({});
+	for (const [path, names] of [
+		["src/lib/runtime.ts", ["getNodeEnv", "isNodeRuntime"]],
+		["src/lib/domains/provision.ts", ["shouldBindEmailCatchAllToWorker"]],
+	]) {
+		const source = ts.createSourceFile(path, read(path), ts.ScriptTarget.Latest, true);
+		for (const name of names) {
+			const declaration = source.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === name);
+			assert.ok(declaration, `${name} must exist in ${path}`);
+			const code = ts.transpileModule(declaration.getText(source).replace(/^export /, ""), {
+				compilerOptions: { target: ts.ScriptTarget.ES2022 },
+			}).outputText;
+			vm.runInContext(code, context);
+		}
+	}
+	return context.shouldBindEmailCatchAllToWorker;
+}
 
-	const runtime = read("src/lib/runtime.ts");
-	assert.match(
-		runtime,
-		/MAILFLARE_RUNTIME === "node"/,
-		"isNodeRuntime must keep detecting MAILFLARE_RUNTIME=node",
-	);
-
-	const isNodeRuntime = (env) => (env ?? undefined)?.MAILFLARE_RUNTIME === "node";
-	const shouldBindEmailCatchAllToWorker = (env) => !isNodeRuntime(env);
+test("Worker catch-all keeps the default while Node opts out (issue #42)", () => {
+	const shouldBindEmailCatchAllToWorker = loadCatchAllDecision();
 
 	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_RUNTIME: "node" }), false);
 	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_RUNTIME: "cloudflare" }), true);
 	assert.equal(shouldBindEmailCatchAllToWorker({}), true);
 	assert.equal(shouldBindEmailCatchAllToWorker(undefined), true);
+});
+
+test("only explicit false disables automatic Worker catch-all binding", () => {
+	const shouldBindEmailCatchAllToWorker = loadCatchAllDecision();
+	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_CATCH_ALL: false }), false);
+	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_CATCH_ALL: "false" }), false);
+	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_CATCH_ALL: true }), true);
+	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_CATCH_ALL: "true" }), true);
+	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_CATCH_ALL: "" }), true);
+	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_CATCH_ALL: "False" }), true);
+	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_RUNTIME: "node", MAILFLARE_CATCH_ALL: true }), false);
 });
 
 test("provision.ts imports isNodeRuntime next to hasCloudflareCredentials", () => {

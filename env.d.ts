@@ -46,6 +46,8 @@ interface CloudflareEnv {
 	GITHUB_UPDATE_REPO?: string;
 	/** "node" when served by the self-hosted runtime in server/; unset on Workers. */
 	MAILFLARE_RUNTIME?: "node";
+	/** Set to false (or "false") to skip automatically binding the zone's catch-all to the Worker. */
+	MAILFLARE_CATCH_ALL?: boolean | string;
 	/** Shared secret the Cloudflare email relay signs inbound webhooks with (self-hosted only). */
 	INBOUND_WEBHOOK_SECRET?: string;
 	/** Cloudflare account id, needed for the Email Sending REST API off Workers. */

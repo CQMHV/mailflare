@@ -2,6 +2,8 @@
 
 This guide covers Cloudflare deployment, runtime configuration, database backups, and application updates.
 
+This installation fork is already deployed. Follow [Fork maintenance](fork-maintenance.md) to update its existing Worker and bindings. The upstream one-click button below is for a fresh installation, not for redeploying this fork.
+
 ## Overview
 
 Set up Mailflare in three steps:
@@ -139,7 +141,7 @@ The assistant panel no longer exposes MCP key management. External MCP clients c
 
 ## Updating Mailflare
 
-The **Update Mailflare** button in the admin dashboard dispatches `.github/workflows/deploy-update.yml` in the installation repository. The workflow replaces the installation branch's complete tracked tree with the latest upstream source, commits that replacement, and pushes it. This avoids merge conflicts between independently created installation and upstream histories. Target-only committed files and code changes are intentionally removed; repository variables, secrets, and other GitHub or Cloudflare configuration remain unchanged. A connected Cloudflare Git integration then builds and deploys the change.
+In this installation fork, the **Update Mailflare** button dispatches `.github/workflows/deploy-update.yml`, which merges upstream into the installation branch without replacing its tracked tree. It verifies the fork regression tests and complete build before pushing. Conflicts or failed checks stop the update before anything is pushed. A connected Cloudflare Git integration then builds and deploys the accepted change. See [Fork maintenance](fork-maintenance.md) for the review-first update process and deployment configuration.
 
 ### Auto update
 
@@ -163,7 +165,7 @@ Configure the token and repository details in both Cloudflare and GitHub:
 
 The same token can be used for `GITHUB_UPDATE_TOKEN` and `MAILFLARE_UPDATE_TOKEN` when it has all three permissions above. Keep both values secret and limit the token's repository access to the installation repository.
 
-Make sure `.github/workflows/deploy-update.yml` exists on the installation branch. If it is missing, create the file and copy its contents from the [canonical Mailflare update workflow](https://github.com/hieunc229/mailflare/blob/main/.github/workflows/deploy-update.yml). If an older installation has a different updater, replace it with the latest canonical workflow once. A running workflow cannot create or replace itself until the current workflow has been installed manually.
+Keep this fork's `.github/workflows/deploy-update.yml` on the installation branch. Do not replace it with an upstream workflow that resets the tracked tree: that would remove installation-specific fixes and configuration. Review workflow changes when merging upstream. If GitHub update credentials have not been configured, use the local merge and deployment commands in [Fork maintenance](fork-maintenance.md).
 
 After the GitHub Action completes successfully, wait for the connected Cloudflare deployment to finish before refreshing Mailflare or applying pending database migrations. The workflow updates the repository first; the new application version is not live until Cloudflare completes its deployment.
 

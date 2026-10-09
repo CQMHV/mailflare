@@ -183,6 +183,7 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 	const { input, messageId, jobId, from, mailboxId, to, cc, bcc, headers, attachments } = delivery;
 	const db = getDb(env);
 	const toAddr = joinEmailAddressList(to);
+	let response: { messageId: string };
 	try {
 		const provider = await getOutboundProviderConfig(env, from);
 		// Cloudflare's 5 MiB cap forces big files into download links; Resend takes
@@ -199,7 +200,7 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 		if (prepared.text !== input.text || prepared.html !== input.html) {
 			await db.update(messages).set({ textBody: prepared.text ?? null, htmlBody: prepared.html ?? null }).where(eq(messages.id, messageId));
 		}
-		const response = await sendThroughProvider(
+		response = await sendThroughProvider(
 			env,
 			provider,
 			{
@@ -221,25 +222,52 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 			},
 			jobId,
 		);
+	} catch (err) {
+		const error = err instanceof Error ? err.message : "Send failed";
+		const recorded = await Promise.allSettled([
+			db.update(messages).set({ status: "failed" }).where(eq(messages.id, messageId)),
+			db.update(outboundJobs).set({ status: "failed", error, updatedAt: new Date() }).where(eq(outboundJobs.id, jobId)),
+		]);
+		for (const result of recorded) {
+			if (result.status === "rejected") console.error("Could not record outbound failure", { messageId, jobId, error: result.reason });
+		}
+		try {
+			await dispatchWebhooks(env, input.userId, "message.failed", { messageId, error });
+		} catch (notificationError) {
+			console.error("Outbound failure webhook failed", { messageId, jobId, error: notificationError });
+		}
+		throw err;
+	}
 
-		// A fresh message starts its own conversation; Cloudflare's Message-ID is what
-		// any reply will name in In-Reply-To, so key the thread by it.
-		await db
-			.update(messages)
-			.set({
-				status: "sent",
-				providerMessageId: response.messageId,
-				threadId: input.threadId ?? normalizeMessageId(response.messageId) ?? messageId,
-			})
-			.where(eq(messages.id, messageId));
-		await db.update(outboundJobs).set({ status: "sent", updatedAt: new Date() }).where(eq(outboundJobs.id, jobId));
-
+	// The provider has accepted this email. Local persistence or notification errors
+	// must not turn it into a failed send or ask the queue to send it again.
+	// Record the job first; the message is an independent fallback for redelivery.
+	try {
+		await db.update(outboundJobs).set({ status: "sent", error: null, updatedAt: new Date() }).where(eq(outboundJobs.id, jobId));
+	} catch (error) {
+		console.error("Could not record accepted outbound job", { messageId, jobId, providerMessageId: response.messageId, error });
+	}
+	try {
+		// A fresh message starts its own conversation using the provider's Message-ID.
+		await db.update(messages).set({
+			status: "sent",
+			providerMessageId: response.messageId,
+			threadId: input.threadId ?? normalizeMessageId(response.messageId) ?? messageId,
+		}).where(eq(messages.id, messageId));
+	} catch (error) {
+		console.error("Could not record accepted outbound message", { messageId, jobId, providerMessageId: response.messageId, error });
+	}
+	try {
 		await dispatchWebhooks(env, input.userId, "message.outbound", {
 			messageId,
 			providerMessageId: response.messageId,
 			to: toAddr,
 			cc: cc.length ? joinEmailAddressList(cc) : undefined,
 		});
+	} catch (error) {
+		console.error("Outbound success webhook failed", { messageId, jobId, error });
+	}
+	try {
 		await createAuditLog(env, {
 			actorUserId: input.userId,
 			mailboxId,
@@ -247,15 +275,8 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 			action: "email.send",
 			metadata: { to: toAddr, cc: cc.length ? joinEmailAddressList(cc) : undefined, subject: input.subject },
 		});
-	} catch (err) {
-		const error = err instanceof Error ? err.message : "Send failed";
-		await db.update(messages).set({ status: "failed" }).where(eq(messages.id, messageId));
-		await db
-			.update(outboundJobs)
-			.set({ status: "failed", error, updatedAt: new Date() })
-			.where(eq(outboundJobs.id, jobId));
-		await dispatchWebhooks(env, input.userId, "message.failed", { messageId, error });
-		throw err;
+	} catch (error) {
+		console.error("Outbound audit log failed", { messageId, jobId, error });
 	}
 }
 
@@ -292,12 +313,24 @@ export async function processOutboundQueue(
 ): Promise<void> {
 	const db = getDb(env);
 	const [job] = await db
-		.select({ status: outboundJobs.status, payload: outboundJobs.payload })
+		.select({ status: outboundJobs.status, payload: outboundJobs.payload, messageId: outboundJobs.messageId, scheduledAt: outboundJobs.scheduledAt })
 		.from(outboundJobs)
 		.where(eq(outboundJobs.id, payload.jobId))
 		.limit(1);
-	if (!job || job.status !== "queued") return;
-	const scheduledAt = new Date(payload.scheduledAt);
+	// Only scheduled jobs are queue work. A failed immediate send is never retried
+	// here, and sent jobs remain terminal even if the queue redelivers its payload.
+	if (!job || job.status === "sent" || !job.scheduledAt || job.messageId !== payload.messageId) return;
+	const [message] = await db
+		.select({ status: messages.status, providerMessageId: messages.providerMessageId })
+		.from(messages)
+		.where(eq(messages.id, payload.messageId))
+		.limit(1);
+	if (!message) return;
+	if (message.status === "sent" || message.providerMessageId) {
+		await db.update(outboundJobs).set({ status: "sent", error: null, updatedAt: new Date() }).where(eq(outboundJobs.id, payload.jobId));
+		return;
+	}
+	const scheduledAt = job.scheduledAt;
 	const input = JSON.parse(job.payload) as SendEmailInput;
 	const to = toRecipientList(input.to);
 	const cc = toRecipientList(input.cc);

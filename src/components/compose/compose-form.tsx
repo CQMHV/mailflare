@@ -280,51 +280,56 @@ export function ComposeForm({
 			finally { setLoading(false); }
 			return;
 		}
-		const res = await authFetch("/api/send", {
-			method: "POST",
-			body: buildSendFormData({
-				attachments,
-				from: fromAddr,
-				to: recipientsToHeader(to),
-				cc: recipientsToHeader(cc),
-				bcc: recipientsToHeader(bcc),
-				subject,
-				text: htmlToPlainText(fullHtml),
-				html: fullHtml,
-				mailboxId: selectedMailbox?.id,
-				threading: threading ?? undefined,
-				draftId,
-				scheduledAt,
-			}),
-		});
-		const data = (await res.json()) as { messageId?: string; scheduled?: boolean; error?: string };
-		setLoading(false);
-
-		if (!res.ok) {
-			setToast({ type: "error", message: data.error ?? t("compose.error.sendFailed") });
-			return;
-		}
-
-		if (draftId) {
-			void authFetch(`/api/drafts/${draftId}`, { method: "DELETE" }).finally(() => {
-				window.dispatchEvent(new Event("mailflare:messages-changed"));
+		try {
+			const res = await authFetch("/api/send", {
+				method: "POST",
+				body: buildSendFormData({
+					attachments,
+					from: fromAddr,
+					to: recipientsToHeader(to),
+					cc: recipientsToHeader(cc),
+					bcc: recipientsToHeader(bcc),
+					subject,
+					text: htmlToPlainText(fullHtml),
+					html: fullHtml,
+					mailboxId: selectedMailbox?.id,
+					threading: threading ?? undefined,
+					draftId,
+					scheduledAt,
+				}),
 			});
+			const data = (await res.json()) as { messageId?: string; scheduled?: boolean; error?: string };
+
+			if (!res.ok) {
+				setToast({ type: "error", message: data.error ?? t("compose.error.sendFailed") });
+				return;
+			}
+
+			if (draftId) {
+				void authFetch(`/api/drafts/${draftId}`, { method: "DELETE" }).finally(() => {
+					window.dispatchEvent(new Event("mailflare:messages-changed"));
+				});
+			}
+			setDraftId(null);
+			setTo([]);
+			setCc([]);
+			setBcc([]);
+			setShowCc(false);
+			setShowBcc(false);
+			setThreading(null);
+			setStoredAttachments([]);
+			setSubject("");
+			setHtml(applyMailboxSignatureHtml("", "", selectedMailbox?.signature));
+			setQuotedHtml(null);
+			setAttachments([]);
+			setScheduledAt(null);
+			setToast({ type: "success", message: data.scheduled ? t("compose.scheduled") : t("compose.sent") });
+			window.dispatchEvent(new Event("mailflare:messages-changed"));
+		} catch {
+			setToast({ type: "error", message: t("compose.error.sendFailed") });
+		} finally {
+			setLoading(false);
 		}
-		setDraftId(null);
-		setTo([]);
-		setCc([]);
-		setBcc([]);
-		setShowCc(false);
-		setShowBcc(false);
-		setThreading(null);
-		setStoredAttachments([]);
-		setSubject("");
-		setHtml(applyMailboxSignatureHtml("", "", selectedMailbox?.signature));
-		setQuotedHtml(null);
-		setAttachments([]);
-		setScheduledAt(null);
-		setToast({ type: "success", message: data.scheduled ? t("compose.scheduled") : t("compose.sent") });
-		window.dispatchEvent(new Event("mailflare:messages-changed"));
 	}
 
 	async function deleteDraftAndClose() {

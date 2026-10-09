@@ -2,7 +2,13 @@
 
 # Mailflare
 
+This is CQMHV's installation fork of [hieunc229/mailflare](https://github.com/hieunc229/mailflare).
+It preserves the production configuration and local fixes described in [Fork maintenance](docs/fork-maintenance.md).
+The deployment configuration targets existing Cloudflare resources; use the maintenance guide when updating this installation.
+
 Mailflare is a self-hosted email inbox for custom domains, built on Cloudflare. Supports **Resend**, or **AWS SES**
+
+For a fresh upstream installation only (not for updating this installed fork):
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare)
 
