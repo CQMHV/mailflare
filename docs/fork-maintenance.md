@@ -20,7 +20,8 @@ locally; they are not a public production Worker.
 
 ## Installation changes
 
-- Disable AI and its Worker binding for this installation.
+- Enable the native Workers AI `AI` binding. Select the assistant provider and
+  supported models in Admin → Agent; these settings are stored in the database.
 - Opt out of automatic catch-all binding with `MAILFLARE_CATCH_ALL=false`.
   Existing per-address rules still deliver to the Worker.
 - Keep the selected Cloudflare sender and recipients when replying between

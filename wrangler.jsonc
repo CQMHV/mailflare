@@ -26,6 +26,9 @@
 	"images": {
 		"binding": "IMAGES",
 	},
+	"ai": {
+		"binding": "AI",
+	},
 	"services": [
 		{
 			"binding": "WORKER_SELF_REFERENCE",
