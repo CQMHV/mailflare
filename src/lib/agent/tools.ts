@@ -26,7 +26,7 @@ const body = z.string().trim().min(1).max(40_000).describe("The recipient-facing
 const limit = z.number().int().min(1).max(50).default(20);
 
 export const emailToolSchemas = {
-	list_emails: z.object({ folder: z.enum(["inbox", "sent", "scheduled", "draft", "archived", "trash", "spam"]).default("inbox"), limit, cursor: id.optional() }),
+	list_emails: z.object({ folder: z.enum(["inbox", "sent", "scheduled", "draft", "archived", "trash", "spam"]).default("inbox"), limit, cursor: id.nullish().describe("Omit or set to null for the first page. For subsequent pages, use only the exact nextCursor returned by list_emails for this mailbox and folder. Stop when nextCursor is null. Never invent a cursor or use a page number or offset such as '0'.") }),
 	get_email: z.object({ emailId: id }),
 	get_thread: z.object({ emailId: id }),
 	search_emails: z.object({ query: z.string().trim().min(1).max(300), folder: z.enum(["inbox", "sent", "scheduled", "draft", "archived", "trash", "spam"]).optional(), limit }),
@@ -49,7 +49,7 @@ export const emailToolSchemas = {
 } as const;
 
 export const emailToolDescriptions: Record<EmailToolName, string> = {
-	list_emails: "List email metadata in a mailbox folder with pagination.",
+	list_emails: "List email metadata in a mailbox folder with pagination. Omit cursor or set it to null for the first page; use the returned nextCursor for subsequent pages.",
 	get_email: "Read one email and its attachment metadata without marking it read.",
 	get_thread: "Read the recent conversation containing an email before drafting a reply.",
 	search_emails: "Search email subject and body in this mailbox.",
@@ -83,10 +83,10 @@ async function requireAccess(context: AgentToolContext, write = false, manage = 
 	return access;
 }
 
-async function ownMessage(context: AgentToolContext, messageId: string) {
+async function ownMessage(context: AgentToolContext, messageId: string, notFoundMessage = "Message not found") {
 	await requireAccess(context);
 	const [row] = await getDb(context.env).select().from(messages).where(and(eq(messages.id, messageId), eq(messages.mailboxId, context.mailboxId))).limit(1);
-	if (!row || (row.status === "draft" && row.userId !== context.user.id)) throw new Error("Message not found");
+	if (!row || (row.status === "draft" && row.userId !== context.user.id)) throw new Error(notFoundMessage);
 	return row;
 }
 
@@ -133,7 +133,7 @@ export async function runEmailTool(context: AgentToolContext, name: EmailToolNam
 		else conditions.push(or(eq(messages.userId, context.user.id), eq(messages.direction, "inbound"))!);
 		if (name === "search_emails") conditions.push(...buildSearchConditions(input.query as string, context.timeZone));
 		if (input.cursor) {
-			const cursor = await ownMessage(context, input.cursor as string);
+			const cursor = await ownMessage(context, input.cursor as string, "Invalid pagination cursor. To start from the first page, omit cursor or set it to null. For subsequent pages, use only the nextCursor returned by list_emails for this mailbox and folder; never invent a cursor or use a page number or offset.");
 			conditions.push(lt(messages.createdAt, cursor.createdAt));
 		}
 		const pageSize = input.limit as number;

@@ -54,6 +54,18 @@ function patterns(schema, found = []) {
 
 const toolSchemas = { ...emailToolSchemas, ...calendarToolSchemas };
 
+test("list_emails exposes an optional nullable cursor with pagination instructions", () => {
+	assert.equal(emailToolSchemas.list_emails.safeParse({ folder: "inbox", limit: 1 }).success, true);
+	assert.equal(emailToolSchemas.list_emails.safeParse({ folder: "inbox", limit: 1, cursor: null }).success, true);
+	assert.equal(emailToolSchemas.list_emails.safeParse({ folder: "inbox", limit: 1, cursor: "" }).success, false);
+	for (const json of providerSchemas(emailToolSchemas.list_emails)) {
+		assert.equal(json.required?.includes("cursor") ?? false, false);
+		assert.match(json.properties.cursor.description, /first page/);
+		assert.match(json.properties.cursor.description, /nextCursor/);
+		assert.ok(json.properties.cursor.anyOf.some((option) => option.type === "null"));
+	}
+});
+
 test("model-facing email and calendar tool schemas contain no regex lookaround", () => {
 	const offenders = [];
 	for (const [name, schema] of Object.entries(toolSchemas)) {
