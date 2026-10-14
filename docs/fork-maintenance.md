@@ -152,6 +152,11 @@ Database migration checks and actions remain independent and require the primary
 admin. Keep the installation metadata in `src/lib/fork-deployment-config.ts` in
 sync with the existing Worker and repository connection.
 
+The deployment lookup is tested in both Node and the actual workerd runtime.
+Workers does not implement fetch's `redirect: "error"`; use `"manual"` and reject
+redirect responses without following another origin. Failure diagnostics expose
+only a safe category and HTTP status, never provider bodies or credentials.
+
 ## Backups
 
 Mailflare's daily database backup runs at 02:00 UTC (10:00 Asia/Shanghai) when

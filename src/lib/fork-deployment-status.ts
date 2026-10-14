@@ -21,6 +21,13 @@ const checksSchema = z.object({
 	})).max(100),
 });
 
+export class GitHubDeploymentHttpError extends Error {
+	constructor(readonly status: number) {
+		super("Could not read the Cloudflare deployment result from GitHub");
+		this.name = "GitHubDeploymentHttpError";
+	}
+}
+
 async function readGitHub(path: string, signal: AbortSignal): Promise<unknown> {
 	// Only public metadata: never forward Mailflare sessions or use either deployment token.
 	const response = await fetch(`https://api.github.com/repos/${forkDeployment.repository}/${path}`, {
@@ -30,10 +37,12 @@ async function readGitHub(path: string, signal: AbortSignal): Promise<unknown> {
 			"X-GitHub-Api-Version": "2026-03-10",
 		},
 		signal,
-		redirect: "error",
+		// Workers supports manual/follow, not the standard fetch "error" mode.
+		// Reject redirect responses below rather than following another origin.
+		redirect: "manual",
 		cf: { cacheTtlByStatus: { "200-299": 300, "400-599": -1 } },
 	});
-	if (!response.ok) throw new Error("Could not read the Cloudflare deployment result from GitHub");
+	if (!response.ok) throw new GitHubDeploymentHttpError(response.status);
 	return response.json();
 }
 

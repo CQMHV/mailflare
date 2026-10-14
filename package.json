@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "npm run db:bundle && vp dev --port 3000",
     "build": "npm run db:bundle && vp build",
-    "test:fork": "node --test tests/provision-node-catchall.test.mjs tests/outbound-delivery.test.mjs tests/reply-own-alias.test.mjs tests/database-backup-coverage.test.mjs tests/commercial-free-features.test.mjs tests/account-alias-selection.test.mjs tests/setup-bootstrap-schema.test.mjs tests/fork-setup-bootstrap-schema.test.mjs scripts/r2-snapshot/r2-snapshot.test.mjs scripts/r2-snapshot/verify-database.test.mjs tests/agent-tool-schemas.test.mjs tests/workers-ai-stream.test.mjs tests/fork-deployment-status.test.mjs",
+    "test:fork": "node --test tests/provision-node-catchall.test.mjs tests/outbound-delivery.test.mjs tests/reply-own-alias.test.mjs tests/database-backup-coverage.test.mjs tests/commercial-free-features.test.mjs tests/account-alias-selection.test.mjs tests/setup-bootstrap-schema.test.mjs tests/fork-setup-bootstrap-schema.test.mjs scripts/r2-snapshot/r2-snapshot.test.mjs scripts/r2-snapshot/verify-database.test.mjs tests/agent-tool-schemas.test.mjs tests/workers-ai-stream.test.mjs tests/fork-deployment-status.test.mjs tests/fork-deployment-workerd.test.mjs",
     "build:next": "npm run db:bundle && MAILFLARE_RUNTIME=node next build",
     "start": "vp preview --port 3000",
     "lint": "vp lint .",

@@ -47,7 +47,7 @@ function mockGitHub(t, commits, checks) {
 		assert.equal(new Headers(init.headers).get("Authorization"), null);
 		assert.equal(new Headers(init.headers).get("Cookie"), null);
 		assert.ok(init.signal instanceof AbortSignal);
-		assert.equal(init.redirect, "error");
+		assert.equal(init.redirect, "manual");
 		assert.deepEqual(init.cf.cacheTtlByStatus, { "200-299": 300, "400-599": -1 });
 		if (url.pathname === "/repos/CQMHV/mailflare/commits") {
 			assert.equal(url.searchParams.get("sha"), "main");
@@ -172,15 +172,15 @@ test("rate limits, non-JSON and invalid upstream data produce a safe JSON error"
 	const request = await fixture(t);
 	let response;
 	t.mock.method(globalThis, "fetch", async () => response.clone());
-	for (const upstream of [
-		new Response("<html>provider outage</html>", { status: 502 }),
-		Response.json({ message: "rate limit DO-NOT-TRANSMIT" }, { status: 403 }),
-		Response.json([{ sha: "not a valid commit", commit: { message: "bad" } }]),
+	for (const [upstream, diagnostic] of [
+		[new Response("<html>provider outage</html>", { status: 502 }), { code: "upstream-http", upstreamStatus: 502 }],
+		[Response.json({ message: "rate limit DO-NOT-TRANSMIT" }, { status: 403 }), { code: "upstream-http", upstreamStatus: 403 }],
+		[Response.json([{ sha: "not a valid commit", commit: { message: "bad" } }]), { code: "invalid-upstream-response" }],
 	]) {
 		response = upstream;
 		const result = await app.GET(request("owner"));
 		assert.equal(result.status, 502);
-		assert.deepEqual(await result.json(), { error: "Could not retrieve the latest deployment status" });
+		assert.deepEqual(await result.json(), { error: "Could not retrieve the latest deployment status", ...diagnostic });
 	}
 });
 
