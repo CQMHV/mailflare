@@ -23,7 +23,7 @@ export async function authenticateApiKeyValue(env: CloudflareEnv, key: string): 
 	for (const candidate of candidates) {
 		if (!verifyApiKey(trimmed, candidate.keyHash)) continue;
 		const [user] = await db.select().from(users).where(eq(users.id, candidate.userId)).limit(1);
-		if (!user || user.disabled) continue;
+		if (!user || user.disabled || user.deletedAt) continue;
 
 		const stale = new Date(Date.now() - LAST_USED_WRITE_INTERVAL_MS);
 		await db

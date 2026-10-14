@@ -97,7 +97,7 @@ function NavToggle({ expanded, onClick, collapsedLabel, expandedLabel }: { expan
 
 export function DashboardNav({ className }: { className?: string }) {
   const { t } = useLanguage();
-  const { minimal } = useSidebar();
+  const { minimal, mobile } = useSidebar();
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const [foldersOpen, setFoldersOpen] = useState(false);
@@ -234,7 +234,7 @@ export function DashboardNav({ className }: { className?: string }) {
 
   return (
     <SidebarScaffold className={className} header={<SidebarHeader href="/inbox" />} footer={<SidebarFooter />}>
-      {composeLink && <NavItem labelClassName="font-medium" link={composeLink} />}
+      {composeLink && !mobile && <NavItem labelClassName="font-medium" link={composeLink} />}
       {minimal && <hr className="mx-6 my-2 border-neutral-200/70" />}
       <ReorderableList
         storageKey="mailflare:nav:layout"

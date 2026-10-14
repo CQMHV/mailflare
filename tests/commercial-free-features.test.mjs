@@ -14,8 +14,10 @@ await build({
 		contents: `
 			export { applyMigrations } from "./server/runtime/migrate.ts";
 			export { getDb } from "./src/db/index.ts";
-			export { createSession } from "./src/lib/auth/session.ts";
+			export { createSession, getUserFromSession } from "./src/lib/auth/session.ts";
+			export { hashPassword } from "./src/lib/auth/password.ts";
 			export { generateApiKey } from "./src/lib/api-keys.ts";
+			export { authenticateApiKeyValue } from "./src/lib/api/key-auth.ts";
 			export { GET as accountList, POST as accountCreate } from "./src/app/api/accounts/route.ts";
 			export { GET as accountDetail, PATCH as accountUpdate } from "./src/app/api/accounts/[id]/route.ts";
 			export { GET as apiAccountList, POST as apiAccountCreate } from "./src/app/api/v1/accounts/route.ts";
@@ -25,6 +27,7 @@ await build({
 			export { PATCH as forwardingUpdate } from "./src/app/api/settings/forwarding/route.ts";
 			export { PATCH as profileUpdate } from "./src/app/api/settings/profile/route.ts";
 			export { GET as authMe } from "./src/app/api/auth/me/route.ts";
+			export { POST as authLogin } from "./src/app/api/auth/login/route.ts";
 			export { getAccountForwardingDestination } from "./src/lib/email/account-forwarding.ts";
 			export { GET as mailboxList, POST as mailboxCreate } from "./src/app/api/mailboxes/route.ts";
 			export { GET as apiMailboxList, POST as apiMailboxCreate } from "./src/app/api/v1/mailboxes/route.ts";
@@ -154,6 +157,40 @@ test("no-license admin API keeps key scope, account ownership, role and primary-
 	assert.equal((await app.apiAccountDetail(req("foreign", "/api/v1/accounts/member"), params("member"))).status, 404);
 	assert.equal((await app.apiAccountCreate(req("secondary", "/api/v1/accounts", "POST", accountCreate({ role: "admin" })))).status, 403);
 	assert.equal((await app.apiAccountUpdate(req("secondary", "/api/v1/accounts/secondary", "PATCH", accountUpdate({ role: "admin" })), params("secondary"))).status, 403);
+});
+
+test("soft-deleted accounts cannot be re-enabled through session or API account updates", async t => {
+	const f = await fixture(t);
+	f.database.db.exec("UPDATE users SET deleted_at=1,disabled=1 WHERE id IN ('member','foreign-member')");
+	for (const [update, api] of [[app.accountUpdate, false], [app.apiAccountUpdate, true]]) {
+		const path = api ? "/api/v1/accounts/member" : "/api/accounts/member";
+		const response = await update(f.request("admin", path, "PATCH", accountUpdate(), { api }), params("member"));
+		assert.equal(response.status, 409);
+		assert.deepEqual(await response.json(), { error: "This account is deleted. Restore it first" });
+	}
+	assert.deepEqual({ ...f.database.db.prepare("SELECT name,disabled,deleted_at FROM users WHERE id='member'").get() }, {
+		name: "Member", disabled: 1, deleted_at: 1,
+	});
+	assert.equal((await app.apiAccountUpdate(
+		f.request("admin", "/api/v1/accounts/foreign-member", "PATCH", accountUpdate(), { api: true }), params("foreign-member"),
+	)).status, 404);
+});
+
+test("the deleted marker independently rejects password, retained sessions and API keys without licensing", async t => {
+	const f = await fixture(t);
+	const sessionToken = f.request("secondary", "/api/auth/me").headers.get("Authorization").slice(7);
+	assert.equal((await app.authMe(f.request("secondary", "/api/auth/me"))).status, 200);
+	assert.ok(await app.authenticateApiKeyValue(f.env, apiKeys.secondary.fullKey));
+	const password = "deleted-account-password";
+	f.database.db.prepare("UPDATE users SET password_hash=?,deleted_at=1,disabled=0 WHERE id='secondary'").run(app.hashPassword(password));
+	assert.equal(await app.getUserFromSession(f.env, sessionToken), null);
+	assert.equal((await app.authMe(f.request("secondary", "/api/auth/me"))).status, 401);
+	assert.equal(await app.authenticateApiKeyValue(f.env, apiKeys.secondary.fullKey), null);
+	assert.equal((await app.apiAccountList(f.request("secondary", "/api/v1/accounts", "GET", undefined, { api: true }))).status, 401);
+	const login = await app.authLogin(f.request("secondary", "/api/auth/login", "POST", { email: "secondary@one.test", password }));
+	assert.equal(login.status, 403);
+	assert.deepEqual(await login.json(), { error: "Account disabled" });
+	assert.equal(f.database.db.prepare("SELECT disabled,deleted_at FROM users WHERE id='secondary'").get().disabled, 0);
 });
 
 test("custom branding persists and serves its icon without a license; only primary admin may change it", async t => {

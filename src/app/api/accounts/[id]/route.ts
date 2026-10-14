@@ -47,6 +47,9 @@ export async function PATCH(request: Request, { params }: AccountRouteParams) {
 	if (!account) {
 		return NextResponse.json({ error: "Account not found" }, { status: 404 });
 	}
+	if (account.deletedAt) {
+		return NextResponse.json({ error: "This account is deleted. Restore it first" }, { status: 409 });
+	}
 	const actor = access.user!;
 	const actorIsPrimary = isPrimaryAdmin(actor);
 	if (!actorIsPrimary && !canManageUsers(actor)) {

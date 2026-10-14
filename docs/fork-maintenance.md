@@ -9,6 +9,20 @@ The 2026-10-14 update merges upstream through
 streaming fixes. The production database migrations `0061` and `0062` add only
 columns to existing tables; apply them before deploying this version.
 
+The 2026-10-15 update merges upstream through `f982147`, including PR #144's
+assistant pagination fix, account deletion and manual-domain DNS checks. Migration
+`0063_add_account_deletion.sql` adds nullable `last_sign_in_at` and `deleted_at`
+columns to `users`. Apply and record it before deploying, because authentication
+reads the new columns. No new table or cloud resource is required.
+
+Account deletion keeps the upstream 20-day restoration window without commercial
+seat checks. Soft-deleted accounts cannot authenticate or be re-enabled through
+the account PATCH API. Pending scheduled sends are cancelled and kept as drafts;
+already claimed sends are left alone. Retention defers permanent cleanup if
+another account depends on its domains, aliases, shared mailboxes, authored mail
+or mixed-owner Drive folders. Reassign those dependencies before cleanup rather
+than allowing foreign-key cascades to remove other users' data.
+
 ## Configuration and data
 
 The committed `wrangler.jsonc` identifies the existing `mailflare` Worker, D1

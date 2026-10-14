@@ -6,7 +6,7 @@ import { HeaderSearch } from "@/components/header-search";
 import { useMailSearch } from "./mail-search-context";
 import { useShortcuts } from "@/components/shortcuts";
 
-export function MailSearchInput() {
+export function MailSearchInput({ mobileEnd }: { mobileEnd?: boolean }) {
 	const { t } = useLanguage();
 	const { input: query, setQuery } = useMailSearch();
 	const { openCommandPalette, shortcutsEnabled, shortcutsPreferenceLoading } = useShortcuts();
@@ -17,6 +17,7 @@ export function MailSearchInput() {
 			value={query}
 			onChange={setQuery}
 			label={t("search.mail")}
+			mobileEnd={mobileEnd}
 			placeholder={showShortcutHints ? t("search.mailHint") : t("search.mail")}
 			inputProps={{ "data-mail-search-input": "" }}
 			trailing={query ? (

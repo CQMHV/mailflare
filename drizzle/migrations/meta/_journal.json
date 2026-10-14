@@ -386,6 +386,13 @@
       "when": 1788850803023,
       "tag": "0062_add_remote_content_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "6",
+      "when": 1788850804023,
+      "tag": "0063_add_account_deletion",
+      "breakpoints": true
     }
   ]
 }

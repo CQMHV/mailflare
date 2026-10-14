@@ -135,3 +135,20 @@ test("an unregistered persistent table causes export to fail instead of silently
 	sqlite.exec("CREATE TABLE unregistered_data (id TEXT)");
 	await assert.rejects(exportDatabaseRecords(db), /unregistered_data not listed in BACKUP_TABLES/);
 });
+
+test("account deletion columns preserve both pre-0063 backups and current restoration state", async t => {
+	const older = database(t, "0062");
+	seed(older.sqlite);
+	const olderBackup = await exportDatabaseRecords(older.db);
+	const current = database(t);
+	seed(current.sqlite);
+	await restoreDatabaseRecords(current.db, olderBackup.buffer);
+	assert.deepEqual({ ...current.sqlite.prepare("SELECT disabled,last_sign_in_at,deleted_at FROM users WHERE id='u'").get() },
+		{ disabled: 0, last_sign_in_at: null, deleted_at: null });
+	current.sqlite.exec("UPDATE users SET disabled=1,last_sign_in_at=100,deleted_at=200 WHERE id='u'");
+	const currentBackup = await exportDatabaseRecords(current.db);
+	await restoreDatabaseRecords(current.db, currentBackup.buffer);
+	assert.deepEqual({ ...current.sqlite.prepare("SELECT disabled,last_sign_in_at,deleted_at FROM users WHERE id='u'").get() },
+		{ disabled: 1, last_sign_in_at: 100, deleted_at: 200 });
+	assert.deepEqual(current.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+});

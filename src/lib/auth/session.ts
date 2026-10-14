@@ -29,6 +29,7 @@ export async function createSession(env: CloudflareEnv, userId: string): Promise
 		tokenHash,
 		expiresAt,
 	});
+	await db.update(users).set({ lastSignInAt: new Date() }).where(eq(users.id, userId));
 
 	return token;
 }
@@ -41,7 +42,7 @@ export async function getUserFromSession(
 	if (!session) return null;
 	const db = getDb(env);
 	const [user] = await db.select().from(users).where(eq(users.id, session.userId)).limit(1);
-	return user ?? null;
+	return user?.deletedAt ? null : user ?? null;
 }
 
 export async function getSessionFromToken(

@@ -34,6 +34,10 @@ export const users = sqliteTable("users", {
 	totpSecret: text("totp_secret"),
 	totpEnabled: integer("totp_enabled", { mode: "boolean" }).notNull().default(false),
 	totpConfirmedAt: integer("totp_confirmed_at", { mode: "timestamp" }),
+	lastSignInAt: integer("last_sign_in_at", { mode: "timestamp" }),
+	// Set when an admin deletes the account. The account is also `disabled` and can be restored until the
+	// retention window ends, after which the scheduled purge removes it and its data.
+	deletedAt: integer("deleted_at", { mode: "timestamp" }),
 	createdByUserId: text("created_by_user_id").references((): AnySQLiteColumn => users.id, { onDelete: "set null" }),
 	createdAt: integer("created_at", { mode: "timestamp" })
 		.notNull()
