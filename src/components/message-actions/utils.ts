@@ -171,9 +171,9 @@ export function buildReplyQuoteHtml(
 /**
  * Who a reply goes to. A plain reply answers the sender, or the Reply-To
  * addresses when the message names any (RFC 5322 §3.6.2); reply-all also keeps
- * everyone else on the To and Cc lines, minus the mailbox's own addresses so
- * the author is not mailing themselves. Replying to a sent message re-addresses
- * its original recipients.
+ * everyone else on the To and Cc lines, minus the mailbox's own addresses.
+ * The original sender stays even when the message came from another own alias.
+ * Replying to a sent message re-addresses its original recipients.
  */
 export function getReplyRecipients(
   message: ReplyableMessage,
@@ -182,10 +182,10 @@ export function getReplyRecipients(
 ): ReplyRecipients {
   const own = new Set(ownAddresses.map((address) => normalizeEmailAddress(address)));
   const seen = new Set<string>();
-  const unique = (entries: string[]) =>
+  const unique = (entries: string[], excludeOwn = true) =>
     entries.filter((entry) => {
       const key = normalizeEmailAddress(entry);
-      if (!key || own.has(key) || seen.has(key)) return false;
+      if (!key || (excludeOwn && own.has(key)) || seen.has(key)) return false;
       seen.add(key);
       return true;
     });
@@ -197,7 +197,7 @@ export function getReplyRecipients(
   }
 
   const replyTo = unique(splitEmailAddressList(message.replyTo));
-  const to = replyTo.length ? replyTo : unique([message.fromAddr]);
+  const to = replyTo.length ? replyTo : unique([message.fromAddr], false);
   if (mode !== "replyAll") return { to, cc: [] };
   const cc = unique([...splitEmailAddressList(message.toAddr), ...splitEmailAddressList(message.ccAddr)]);
   return { to, cc };
