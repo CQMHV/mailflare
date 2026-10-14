@@ -126,9 +126,9 @@ export default function AwsCredentialsPanel({ need, onChanged }: Props) {
 				>
 					{showForm ? (
 						<form className="grid gap-2" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-							<Input autoComplete="off" placeholder={t("aws.accessKeyId")} value={accessKeyId} onChange={(event) => setAccessKeyId(event.target.value)} className="max-w-sm bg-white" />
-							<Input type="password" autoComplete="off" placeholder={t("aws.secretKey")} value={secretAccessKey} onChange={(event) => setSecretAccessKey(event.target.value)} className="max-w-sm bg-white" />
-							<Input list="aws-regions" placeholder={t("aws.region")} value={region} onChange={(event) => setRegion(event.target.value)} className="max-w-[12rem] bg-white" />
+							<Input autoComplete="off" aria-label={t("aws.accessKeyId")} placeholder={t("aws.accessKeyId")} value={accessKeyId} onChange={(event) => setAccessKeyId(event.target.value)} className="max-w-sm bg-white" />
+							<Input type="password" autoComplete="off" aria-label={t("aws.secretKey")} placeholder={t("aws.secretKey")} value={secretAccessKey} onChange={(event) => setSecretAccessKey(event.target.value)} className="max-w-sm bg-white" />
+							<Input list="aws-regions" aria-label={t("aws.region")} placeholder={t("aws.region")} value={region} onChange={(event) => setRegion(event.target.value)} className="max-w-[12rem] bg-white" />
 							<datalist id="aws-regions">{REGION_HINTS.map((hint) => <option key={hint} value={hint} />)}</datalist>
 							<span className="flex gap-2">
 								<Button type="submit" size="sm" disabled={!accessKeyId.trim() || !secretAccessKey.trim() || !region.trim() || busy !== null}>{busy === "save" ? t("aws.validating") : t("aws.validateSave")}</Button>

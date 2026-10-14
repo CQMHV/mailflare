@@ -274,7 +274,7 @@ export function RegisterClient() {
             )}
           </div>
           {error && (
-            <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            <p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
             </p>
           )}
@@ -306,7 +306,7 @@ export function RegisterClient() {
               id="domain"
               name="domain"
               placeholder="example.com"
-              autoComplete="url"
+              autoComplete="off"
               required
               onBlur={(event) => void onDomainBlur(event)}
               onChange={(event) => {
@@ -347,7 +347,7 @@ export function RegisterClient() {
             </div>
           )}
           {error && (
-            <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            <p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
             </p>
           )}
@@ -425,6 +425,7 @@ export function RegisterClient() {
               id="resetEmail"
               name="resetEmail"
               type="email"
+              autoComplete="email"
               placeholder="you@gmail.com"
               required
             />
@@ -432,7 +433,7 @@ export function RegisterClient() {
           </div>
 
           {error && (
-            <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            <p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
             </p>
           )}

@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AtSign, Save, Trash2, UserPlus } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ import {
   revokeSharedInboxAccess,
   updateMailboxSettings,
 } from "./utils";
+import { getMailboxesBase } from "../utils";
 import MailboxAvatarForm from "./MailboxAvatarForm";
 
 export default function MailboxSettingsPage() {
@@ -67,11 +68,12 @@ export default function MailboxSettingsPage() {
   });
 
   const router = useRouter();
+  const base = getMailboxesBase(usePathname());
   const removeMailbox = useMutation({
     mutationFn: () => deleteMailbox(mailboxId),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["mailboxes"] });
-      router.push("/mailboxes");
+      router.push(base);
     },
   });
 

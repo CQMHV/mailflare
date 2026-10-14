@@ -98,7 +98,7 @@ export function EmailClientsSettings() {
 						)}
 						<p className="text-xs text-neutral-500">{t("emailClients.aliasLimit", { max: MAX_KEY_MAILBOXES })}</p>
 					</fieldset>
-					{error && <p className="w-full text-sm text-red-600">{error}</p>}
+					{error && <p role="alert" className="w-full text-sm text-red-600">{error}</p>}
 				</form>
 			)}
 		</div>

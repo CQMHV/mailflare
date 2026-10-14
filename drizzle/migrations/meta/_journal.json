@@ -372,6 +372,20 @@
       "when": 1788850801023,
       "tag": "0060_add_license_seat_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "6",
+      "when": 1788850802023,
+      "tag": "0061_add_message_reply_to",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "6",
+      "when": 1788850803023,
+      "tag": "0062_add_remote_content_settings",
+      "breakpoints": true
     }
   ]
 }

@@ -4,13 +4,14 @@ import type { SQL } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getDb } from "@/db";
-import { messages } from "@/db/schema";
+import { messages, outboundJobs } from "@/db/schema";
 import { getContactDisplayNameMap } from "@/lib/contacts/service";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import { getMailboxAccessLevel, listAccessibleMailboxes } from "@/lib/mailboxes/access";
 import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { getRequestTimeZone } from "@/lib/time/utils";
+import { scheduledMessageCondition } from "@/lib/email/scheduled";
 import { getMessageListColumns, loadConversationPage } from "./utils";
 import type { ListMessage } from "./types";
 
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
 	const read = url.searchParams.get("read");
 	const starred = url.searchParams.get("starred");
 	const snoozed = url.searchParams.get("snoozed");
+	const scheduled = url.searchParams.get("scheduled");
 	const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 100);
 	const offset = Math.max(Number(url.searchParams.get("offset") ?? 0), 0);
 	// Conversation view: one row per thread, represented by its newest message
@@ -77,6 +79,9 @@ export async function GET(request: Request) {
 		conditions.push(isNull(messages.folderId));
 		conditions.push(gt(messages.snoozedUntil, new Date()));
 	}
+	if (scheduled === "true") {
+		conditions.push(scheduledMessageCondition(db));
+	}
 	if (read === "read") {
 		conditions.push(eq(messages.read, true));
 	}
@@ -100,6 +105,9 @@ export async function GET(request: Request) {
 	// Which stored messages each visible row stands for, so acting on a
 	// conversation row acts on the whole conversation within this folder.
 	const threadMessageIds = new Map<string, string[]>();
+	// Unread messages per conversation within this folder; the row's unread state
+	// has to match what marking it read will actually change.
+	const scopedThreadCounts = new Map<string, { total: number; unread: number }>();
 	if (groupByThread) {
 		const page = await loadConversationPage({ db, where, offset, limit });
 		total = page.total;
@@ -111,13 +119,17 @@ export async function GET(request: Request) {
 		const keys = rows.map((row) => row.threadId ?? row.id);
 		if (keys.length > 0) {
 			const members = await db
-				.select({ id: messages.id, key: threadKey })
+				.select({ id: messages.id, key: threadKey, read: messages.read })
 				.from(messages)
 				.where(and(where, inArray(threadKey, keys)));
 			for (const member of members) {
 				const list = threadMessageIds.get(member.key) ?? [];
 				list.push(member.id);
 				threadMessageIds.set(member.key, list);
+				const counts = scopedThreadCounts.get(member.key) ?? { total: 0, unread: 0 };
+				counts.total += 1;
+				if (!member.read) counts.unread += 1;
+				scopedThreadCounts.set(member.key, counts);
 			}
 		}
 	} else {
@@ -154,6 +166,16 @@ export async function GET(request: Request) {
 			if (row.threadId) threadCounts.set(row.threadId, { total: row.total, unread: Number(row.unread ?? 0) });
 		}
 	}
+	const scheduledAtByMessageId = new Map<string, string>();
+	if (scheduled === "true" && rows.length > 0) {
+		const jobs = await db
+			.select({ messageId: outboundJobs.messageId, scheduledAt: outboundJobs.scheduledAt })
+			.from(outboundJobs)
+			.where(and(inArray(outboundJobs.messageId, rows.map((row) => row.id)), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)));
+		for (const job of jobs) {
+			if (job.messageId && job.scheduledAt) scheduledAtByMessageId.set(job.messageId, job.scheduledAt.toISOString());
+		}
+	}
 	const mailboxNameMap = new Map(
 		accessibleMailboxes.map((mailbox) => [
 			mailbox.id,
@@ -180,18 +202,21 @@ export async function GET(request: Request) {
 	// reading pane loads them from /api/messages/[id]/thread, so they are
 	// neither selected nor sent here.
 	const enrichedRows = rows.map(({ rawR2Key: _rawR2Key, ...message }) => {
+		const threadStats = message.threadId ? threadCounts.get(message.threadId) : undefined;
+		const folderUnread = scopedThreadCounts.get(message.threadId ?? message.id)?.unread;
 		const contactMap = contactMapsByUserId.get(message.userId);
 		const accountName = message.mailboxId ? mailboxNameMap.get(message.mailboxId) : null;
 		return {
 			...message,
 			snippet: message.snippet,
+			...(scheduledAtByMessageId.has(message.id) ? { scheduledAt: scheduledAtByMessageId.get(message.id) } : {}),
 			fromContactName:
 				(message.direction === "outbound" ? accountName : null) ??
 				contactMap?.get(normalizeEmailAddress(message.fromAddr)) ??
 				null,
 			toContactName: contactMap?.get(normalizeEmailAddress(getFirstEmailAddressEntry(message.toAddr))) ?? null,
-			threadCount: (message.threadId && threadCounts.get(message.threadId)?.total) || 1,
-			threadUnread: (message.threadId && threadCounts.get(message.threadId)?.unread) || 0,
+			threadCount: threadStats?.total || 1,
+			threadUnread: (groupByThread ? folderUnread : threadStats?.unread) || 0,
 			...(groupByThread
 				? { threadMessageIds: threadMessageIds.get(message.threadId ?? message.id) ?? [message.id] }
 				: {}),

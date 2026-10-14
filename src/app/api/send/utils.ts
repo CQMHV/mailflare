@@ -9,6 +9,12 @@ function getOptionalFormValue(form: FormData, key: string): string | undefined {
 	return typeof value === "string" && value ? value : undefined;
 }
 
+export function isPastSchedule(value: string | undefined, now = Date.now()): boolean {
+	if (!value) return false;
+	const time = new Date(value).getTime();
+	return !Number.isFinite(time) || time < now - 60_000;
+}
+
 export async function parseSendRequest(request: Request): Promise<SendRequestPayload> {
 	if (!request.headers.get("content-type")?.includes("multipart/form-data")) {
 		return readJsonBody<SendRequestPayload>(request, MAX_SEND_REQUEST_SIZE);

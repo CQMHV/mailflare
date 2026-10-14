@@ -5,7 +5,7 @@ import { Bot, Globe2, KeyRound, Mail, Palette, Users } from "lucide-react";
 import { useLanguage } from "@/components/language-provider";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { AdminUpdateCard } from "@/components/admin-update-card";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
 type AdminSection = {
@@ -102,7 +102,7 @@ export default function AdminSettingsPage() {
 									<div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
 										<Icon className="h-5 w-5" />
 									</div>
-									<CardTitle className="text-base">{t(section.titleKey)}</CardTitle>
+									<h2 className="text-base font-semibold leading-none">{t(section.titleKey)}</h2>
 								</CardHeader>
 								<CardContent className="pt-4">
 									<p className="text-sm text-neutral-500">{t(section.descriptionKey)}</p>

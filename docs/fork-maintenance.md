@@ -4,13 +4,19 @@ This fork preserves the Mailflare installation running at `https://mail.cqmhv.co
 The original source is `hieunc229/mailflare`, initially based on commit
 `83ade981e588bd7d693fe4a14850a844bcd8984a`.
 
+The 2026-10-14 update merges upstream through
+`92f8eec` (Mailflare 0.5.2), including the OpenRouter tool-schema and Workers AI
+streaming fixes. The production database migrations `0061` and `0062` add only
+columns to existing tables; apply them before deploying this version.
+
 ## Configuration and data
 
 The committed `wrangler.jsonc` identifies the existing `mailflare` Worker, D1
 database, `mailflare-raw` bucket, queues and custom domain. Resource identifiers
 are not credentials. Reuse these bindings when deploying this installation;
 creating a new database or changing bucket names would disconnect existing data.
-Cloudflare Access protects the custom domain, the workers.dev hostname and preview URLs.
+The custom domain and workers.dev hostname use Mailflare's own authentication.
+Cloudflare's account-level Access protection remains enabled for preview URLs.
 
 `CF_TOKEN` remains a Cloudflare Worker secret. No API token, password, recovery
 code, email backup, restored database, deployment log or generated build is part
@@ -71,6 +77,10 @@ Never copy the runtime `CF_TOKEN` into Git or use it as a deployment credential.
 and pull requests. It does not deploy or receive production credentials. This
 targeted suite is distinct from the full upstream test suite, which has known
 fixture failures and Windows SQLite teardown issues in the initial checkout.
+It now also covers the upstream AI tool-schema and streaming fixes. The
+fork-specific Worker bootstrap/backup tests live in
+`tests/fork-setup-bootstrap-schema.test.mjs`; the original bootstrap test filename
+tracks upstream's Node runtime coverage.
 
 For Cloudflare Workers Builds, connect this repository to the **existing**
 `mailflare` Worker. The configured production connection uses:

@@ -181,7 +181,7 @@ export default function BackupsPage() {
                 </div>;
               })}
             </div>
-            {saveSettings.error && <p className="text-sm text-red-700">{saveSettings.error instanceof Error ? saveSettings.error.message : t("backups.saveSettingsFailed")}</p>}
+            {saveSettings.error && <p role="alert" className="text-sm text-red-700">{saveSettings.error instanceof Error ? saveSettings.error.message : t("backups.saveSettingsFailed")}</p>}
             <Button onClick={() => saveSettings.mutate(settings)} disabled={saveSettings.isPending}><Save className="h-4 w-4" />{saveSettings.isPending ? t("common.saving") : t("backups.saveSettings")}</Button>
           </div>}
         </DialogContent>

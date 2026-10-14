@@ -125,9 +125,9 @@ export default function BookingsPage() {
 								<div className="min-w-0"><h1 className="text-xl font-semibold text-neutral-900 md:text-3xl">{t("booking.title")}</h1><p className="mt-1 text-sm text-neutral-500">{t("booking.description")}</p></div>
 								<div className="flex shrink-0 items-center gap-2">
 
-									<Button variant="ghost" className="w-10 max-md:-mr-2">
-										<Link href={`/c/${username}`} target="_blank" className="text-blue-700 underline underline-offset-2">
-											<ExternalLink size={18} />
+									<Button asChild variant="ghost" className="w-10 max-md:-mr-2">
+										<Link href={`/c/${username}`} target="_blank" rel="noopener noreferrer" aria-label={t("booking.openPage", { name: username })} className="text-blue-700">
+											<ExternalLink size={18} aria-hidden="true" />
 										</Link>
 									</Button>
 

@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   Archive,
+  CalendarClock,
   Clock,
   FileText,
   Folder,
@@ -61,6 +62,7 @@ const links = [
   { href: "/starred", labelKey: "navigation.starred", icon: Star, preloadMessages: true },
   { href: "/snoozed", labelKey: "navigation.snoozed", icon: Clock, preloadMessages: true },
   { href: "/sent", labelKey: "navigation.sent", icon: Send, preloadMessages: true },
+  { href: "/scheduled", labelKey: "navigation.scheduled", icon: CalendarClock, preloadMessages: true },
   { href: "/drafts", labelKey: "navigation.drafts", icon: FileText, preloadMessages: true },
   {
     href: "/archived",
@@ -108,7 +110,7 @@ export function DashboardNav({ className }: { className?: string }) {
     useState<FolderColor>(DEFAULT_FOLDER_COLOR);
   const [addingFolder, setAddingFolder] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
-  const linksWithCounts: NavLink[] = links.map(({ labelKey, ...rest }): NavLink => {
+  const linksWithCounts: NavLink[] = links.filter((link) => link.href !== "/scheduled" || counts.folders.scheduled.total > 0).map(({ labelKey, ...rest }): NavLink => {
     const link = { ...rest, label: t(labelKey) };
     if (link.href === "/inbox") {
       return { ...link, count: getFolderNavCount("inbox", counts.folders) };
@@ -121,6 +123,9 @@ export function DashboardNav({ className }: { className?: string }) {
     }
     if (link.href === "/sent") {
       return { ...link, count: getFolderNavCount("sent", counts.folders) };
+    }
+    if (link.href === "/scheduled") {
+      return { ...link, count: counts.folders.scheduled.total };
     }
     if (link.href === "/drafts") {
       return { ...link, count: getFolderNavCount("drafts", counts.folders) };

@@ -130,7 +130,7 @@ export default function AccountDetailsPage() {
 					</Button>
 				)}
 			</section>
-			{message && <p className="text-sm text-neutral-500">{message}</p>}
+			{message && <p role="status" className="text-sm text-neutral-500">{message}</p>}
 		</div>
 	);
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { ShortcutDefinition } from "./types";
+import { findSequenceMatch, isModifierKey } from "./use-hotkeys-utils";
 
 interface UseHotkeysOptions {
   enabled?: boolean;
@@ -92,6 +93,10 @@ export function useHotkeys(
         return;
       }
 
+      if (isModifierKey(key)) return;
+
+      if (e.target instanceof Element && e.target.closest('[role="dialog"], [role="menu"], [role="listbox"]')) return;
+
       // Handle sequence buffer
       sequenceBufferRef.current.push(key);
 
@@ -103,10 +108,7 @@ export function useHotkeys(
         sequenceBufferRef.current = [];
       }, 800);
 
-      const currentSequence = sequenceBufferRef.current.join(" ");
-      const sequenceMatch = shortcutsRef.current.find(
-        (s) => s.key.toLowerCase() === currentSequence
-      );
+      const sequenceMatch = findSequenceMatch(sequenceBufferRef.current, shortcutsRef.current);
 
       if (sequenceMatch) {
         e.preventDefault();

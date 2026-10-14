@@ -33,6 +33,7 @@ import {
   monthGridDates, PAST_EVENT_COLOR_CLASSES, rescheduleCalendarOccurrence, resizeEventTimes, startOfDay, startOfMonth, startOfWeek, WEEKDAY_OPTIONS,
 } from "./utils";
 import clsx from "clsx";
+import { DialogFrame } from "@/components/dialog-frame";
 
 const eventFieldClass = "h-9 border-transparent bg-transparent px-2 shadow-none hover:bg-white/60 focus:border-blue-600 focus:bg-white focus:shadow-sm";
 
@@ -130,7 +131,7 @@ export default function CalendarPage() {
     void authFetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`)
       .then((response) => {
         if (!response.ok) throw new Error(t("calendar.loadFailed"));
-        return response.json();
+        return response.json() as Promise<{ events?: Parameters<typeof expandCalendarEvents>[0] }>;
       })
       .then((data) => { if (active) setEvents(expandCalendarEvents(data.events ?? [], start, end)); })
       .catch(() => { if (active) toast.error(t("calendar.loadFailed")); })
@@ -202,7 +203,7 @@ export default function CalendarPage() {
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
       } else {
-        const result = await response.json();
+        const result = (await response.json()) as { error?: string };
         toast.error(result.error ?? t("calendar.saveFailed"));
       }
     } catch {
@@ -223,7 +224,7 @@ export default function CalendarPage() {
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
       } else {
-        const result = await response.json();
+        const result = (await response.json()) as { error?: string };
         toast.error(result.error ?? t("calendar.deleteFailed"));
       }
     } catch {
@@ -385,6 +386,7 @@ export default function CalendarPage() {
   return (
     <div className={clsx("flex h-full min-h-0 flex-col bg-[#f6f8fc] pl-3 max-md:pl-0 lg:flex-row transition-[gap] duration-200 ease-in-out motion-reduce:transition-none", minimal ? "gap-0" : "gap-3")}>
       <Toaster position="bottom-left" />
+      <h1 className="sr-only">{t("account.calendar")}</h1>
       {loading && <RouteLoadingBarPortal />}
       {headerTarget && createPortal(
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 ">
@@ -426,7 +428,7 @@ export default function CalendarPage() {
                       <button key={dateKey(day)} type="button" aria-label={formatUserDate(day, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} aria-pressed={selected}
                         onClick={() => { setVisibleDate(day); setMonthPickerOpen(false); }}
                         className={clsx("mx-auto my-0.5 flex h-11 w-11 items-center justify-center rounded-full text-base font-medium hover:bg-neutral-200/80",
-                          selected ? "bg-blue-600 text-white hover:bg-blue-600" : isToday ? "bg-neutral-200 text-neutral-900" : outsideMonth ? "text-neutral-400" : "text-neutral-900")}>
+                          selected ? "bg-blue-600 text-white hover:bg-blue-600" : isToday ? "bg-neutral-200 text-neutral-900" : outsideMonth ? "text-neutral-500" : "text-neutral-900")}>
                         {formatUserDate(day, { day: "numeric" })}
                       </button>
                     );
@@ -531,7 +533,7 @@ export default function CalendarPage() {
 
       {adding && (
         <div className={clsx("dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/35 p-4", closingEventEditor && "pointer-events-none")} data-state={closingEventEditor ? "closed" : "open"}>
-          <div role="dialog" aria-modal="true" aria-label={editing ? t("calendar.editEvent") : t("calendar.createEvent")} className="dialog-content max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6" data-state={closingEventEditor ? "closed" : "open"}
+          <DialogFrame label={editing ? t("calendar.editEvent") : t("calendar.createEvent")} onClose={() => { if (pendingAction !== "save") setClosingEventEditor(true); }} className="dialog-content max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6" data-state={closingEventEditor ? "closed" : "open"}
             onAnimationEnd={(event) => {
               if (!closingEventEditor || event.target !== event.currentTarget) return;
               setAdding(false);
@@ -628,7 +630,7 @@ export default function CalendarPage() {
                 </div>
               </div>
             </div>
-          </div>
+          </DialogFrame>
         </div>
       )}
     </div>

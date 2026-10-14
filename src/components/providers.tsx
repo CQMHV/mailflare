@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { clearMailboxClientState } from "@/components/mailbox-provider-utils";
 import { BrandingProvider } from "@/components/branding-provider";
+import type { Branding } from "@/lib/branding/types";
 import { NewMessagePopup } from "@/components/new-message-popup";
 import { PwaServiceWorker } from "@/components/pwa-service-worker";
 import { ThemeSync } from "@/components/theme-sync";
@@ -13,7 +14,7 @@ import { clearMessageDetailCache } from "@/lib/messages/detail-cache";
 import { clearCurrentUserCache } from "@/hooks/use-current-user";
 import { AUTH_SESSION_CHANGED_EVENT } from "@/lib/auth/client";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children, initialBranding }: { children: React.ReactNode; initialBranding?: Branding }) {
 	const realtime = useMessagePolling();
 
 	const [client] = useState(
@@ -45,16 +46,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
 	return (
 		<QueryClientProvider client={client}>
-			<BrandingProvider>
+			<BrandingProvider initialBranding={initialBranding}>
 				<PwaServiceWorker />
 				{children}
 				<ThemeSync />
-				{realtime.notification && (
-					<NewMessagePopup
-						notification={realtime.notification}
-						onDismiss={realtime.dismissNotification}
-					/>
-				)}
+				<div role="status" aria-live="polite">
+					{realtime.notification && (
+						<NewMessagePopup
+							notification={realtime.notification}
+							onDismiss={realtime.dismissNotification}
+						/>
+					)}
+				</div>
 			</BrandingProvider>
 		</QueryClientProvider>
 	);

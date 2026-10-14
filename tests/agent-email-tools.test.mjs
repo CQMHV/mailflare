@@ -76,6 +76,7 @@ test("assistant reads mail, creates an editable reply draft, and invokes tools t
 	const env = { DB: database, BUCKET: { get: async () => null, delete: async () => {} }, AI_BASE_URL: `http://127.0.0.1:${address.port}/v1`, AI_API_KEY: "test-key", AI_MODEL: "test-model" };
 	const context = { env, user: { id: "user-1", email: "owner@example.com", role: "user" }, mailboxId: "mailbox-1", origin: "chat" };
 
+	const direct = { ...context, origin: "mcp" };
 	const listed = await runEmailTool(context, "list_emails", { folder: "inbox", limit: 20 });
 	assert.equal(listed.emails[0].id, "email-1");
 	const email = await runEmailTool(context, "get_email", { emailId: "email-1" });
@@ -94,13 +95,16 @@ test("assistant reads mail, creates an editable reply draft, and invokes tools t
 	assert.equal(database.db.prepare("SELECT count(*) AS count FROM agent_send_approvals").get().count, 0);
 	const newDraft = await runEmailTool(context, "draft_email", { to: "customer@example.net", subject: "Follow up", body: "Hello again." });
 	assert.equal(database.db.prepare("SELECT status FROM messages WHERE id = ?").get(newDraft.draftId).status, "draft");
-	await runEmailTool(context, "discard_draft", { draftId: newDraft.draftId, expectedRevision: 1 });
+	const pendingDiscard = await runEmailTool(context, "discard_draft", { draftId: newDraft.draftId, expectedRevision: 1 });
+	assert.equal(pendingDiscard.status, "pending_approval");
+	assert.ok(database.db.prepare("SELECT id FROM messages WHERE id = ?").get(newDraft.draftId));
+	await runEmailTool(direct, "discard_draft", { draftId: newDraft.draftId, expectedRevision: 1 });
 	assert.equal(database.db.prepare("SELECT id FROM messages WHERE id = ?").get(newDraft.draftId), undefined);
-	await runEmailTool(context, "mark_email_read", { emailId: "email-1", read: true });
+	await runEmailTool(direct, "mark_email_read", { emailId: "email-1", read: true });
 	assert.equal(database.db.prepare("SELECT read FROM messages WHERE id = 'email-1'").get().read, 1);
-	await runEmailTool(context, "move_email", { emailId: "email-1", destination: "archived" });
+	await runEmailTool(direct, "move_email", { emailId: "email-1", destination: "archived" });
 	assert.equal(database.db.prepare("SELECT status FROM messages WHERE id = 'email-1'").get().status, "archived");
-	await runEmailTool(context, "move_email", { emailId: "email-1", destination: "inbox" });
+	await runEmailTool(direct, "move_email", { emailId: "email-1", destination: "inbox" });
 
 	const { stream } = await createAgentChatStream(context, "What arrived in my inbox?");
 	const events = (await new Response(stream).text()).trim().split("\n").map((line) => JSON.parse(line));

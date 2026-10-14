@@ -37,7 +37,7 @@ export function SendReview({ approvalId, snapshot, onClose, onSent }: SendReview
 			</dl>
 			<pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-neutral-200 p-3 text-sm">{snapshot.text || htmlToPlainText(snapshot.html || "")}</pre>
 			{snapshot.attachments.length > 0 && <p className="mt-3 text-sm">{t("agent.review.attachments", { list: snapshot.attachments.map((item) => item.filename).join(", ") })}</p>}
-			{error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+			{error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
 			<div className="mt-5 flex justify-end gap-3">
 				{onClose && <button type="button" className="rounded-lg border px-4 py-2" onClick={onClose} disabled={busy}>{t("common.cancel")}</button>}
 				<button type="button" className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white disabled:opacity-50" onClick={() => void confirm()} disabled={busy}>{busy ? snapshot.scheduledAt ? t("agent.review.scheduling") : t("agent.review.sending") : snapshot.scheduledAt ? t("agent.review.confirmSchedule") : t("agent.review.confirmSend")}</button>

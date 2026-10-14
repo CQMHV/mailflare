@@ -1,5 +1,6 @@
 "use client";
 
+import { SkipToContent } from "@/components/skip-to-content";
 import Link from "next/link";
 import { HelpCircle } from "lucide-react";
 import { AuthGuard } from "@/components/auth/auth-guard";
@@ -13,6 +14,7 @@ import { DashboardNav } from "@/components/dashboard-nav";
 import { SidebarProvider } from "@/components/sidebar-state";
 import { ShortcutsProvider } from "@/components/shortcuts";
 import { SidebarAside, MobileMenuButton } from "@/components/sidebar-aside";
+import { RouteTitle } from "@/components/route-title";
 
 export default function DashboardLayout({
   children,
@@ -26,7 +28,9 @@ export default function DashboardLayout({
           <ComposeProvider>
             <MailSearchProvider>
               <ShortcutsProvider>
+                <RouteTitle />
                 <div className="grid h-[100dvh] grid-cols-[minmax(0,1fr)] md:grid-cols-[var(--sidebar-width)_minmax(0,1fr)] overflow-hidden bg-[#f6f8fc] transition-[grid-template-columns]" style={{ transitionDuration: "var(--sidebar-transition-duration)" }}>
+                  <SkipToContent />
                   <SidebarAside>
                     <DashboardNav />
                   </SidebarAside>
@@ -42,7 +46,7 @@ export default function DashboardLayout({
                   </Link> */}
                       <MailboxSelector />
                     </header>
-                    <main className="page-flush min-h-0 flex-1 overflow-y-auto max-md:rounded-t-3xl max-md:bg-white overscroll-contain scrollbar-gutter-stable">
+                    <main id="main-content" tabIndex={-1} className="focus:outline-none page-flush min-h-0 flex-1 overflow-y-auto max-md:rounded-t-3xl max-md:bg-white overscroll-contain scrollbar-gutter-stable">
                       {children}
                     </main>
                   </div>

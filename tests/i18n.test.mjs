@@ -64,13 +64,15 @@ async function bundleI18n(outfile, extraLocale = false) {
 						xx: { label: "Testlandic", dir: "rtl" },`),
 					loader: "ts",
 				}));
-				builder.onResolve({ filter: /^(next\/headers|next\/font\/google|@\/components\/providers|@\/lib\/cloudflare)$/ }, (args) => ({ path: args.path, namespace: "stub" }));
+				builder.onResolve({ filter: /^(next\/headers|next\/font\/google|@\/components\/providers|@\/lib\/cloudflare|\.\/home-server-utils)$/ }, (args) => ({ path: args.path, namespace: "stub" }));
 				builder.onLoad({ filter: /.*/, namespace: "stub" }, ({ path }) => ({ contents: path === "next/headers"
 					? 'export async function cookies() { return { get(name) { return name === "mailflare-locale" && globalThis.testLocaleCookie !== undefined ? { value: globalThis.testLocaleCookie } : undefined; } }; }'
 					: path === "next/font/google"
 						? 'export const Geist = () => ({ variable: "sans" }); export const Geist_Mono = () => ({ variable: "mono" });'
-						: path === "@/lib/cloudflare"
-							? "export function getEnv() { return { ASSETS: { fetch: globalThis.readTestAsset } }; }"
+						: path === "./home-server-utils"
+							? 'export async function getHomeBranding() { return { appName: "Mailflare", hasCustomIcon: false, canCustomizeBranding: false }; }'
+							: path === "@/lib/cloudflare"
+								? "export function getEnv() { return { ASSETS: { fetch: globalThis.readTestAsset } }; }"
 							: 'export function Providers({ children }) { return children; }' }));
 				builder.onLoad({ filter: /\.css$/ }, () => ({ contents: "", loader: "js" }));
 			},
@@ -118,7 +120,7 @@ test("missing, invalid and unsupported locale values fall back to English", () =
 });
 
 test("translation uses the requested catalog and falls back per key", async () => {
-	assert.equal(i18n.translate(await i18n.loadMessages("pt-BR"), "navigation.inbox"), "Caixa de entrada");
+	assert.equal(i18n.translate(await i18n.loadMessages("pt-BR"), "navigation.inbox"), "Entrada");
 	assert.equal(i18n.translate({}, "navigation.inbox"), "Inbox");
 });
 
@@ -130,7 +132,7 @@ test("preference cookie persists for a year, covers every path and is Secure on 
 
 test("provider server rendering uses initial locale and labels the native language selector", async () => {
 	const pt = await i18n.renderLanguage("pt-BR");
-	assert.match(pt, /Caixa de entrada/);
+	assert.match(pt, /<span>Entrada<\/span>/);
 	assert.match(pt, /<label for="[^"]+"[^>]*>Idioma<\/label>/);
 	assert.match(pt, /<select id="[^"]+"/);
 	assert.match(pt, /value="pt-BR" lang="pt-BR" selected=""/);
@@ -140,7 +142,7 @@ test("provider server rendering uses initial locale and labels the native langua
 test("root layout passes the same cookie locale to HTML and provider on first render", async () => {
 	const pt = await i18n.renderLayout("pt-BR");
 	assert.match(pt, /<html lang="pt-BR"/);
-	assert.match(pt, /Caixa de entrada/);
+	assert.match(pt, /<span>Entrada<\/span>/);
 	for (const value of [undefined, "bad"]) {
 		const english = await i18n.renderLayout(value);
 		assert.match(english, /<html lang="en"/);
@@ -176,6 +178,6 @@ test("a locale registered once reaches resolution, translation, cookie, selector
 test("translations interpolate {vars}, keep unknown placeholders and default to ltr", async () => {
 	assert.equal(i18n.translate({ "navigation.inbox": "Hi {name}, {other}" }, "navigation.inbox", { name: "Ana", count: 2 }), "Hi Ana, {other}");
 	assert.equal(i18n.translate({}, "navigation.inbox", { name: "x" }), "Inbox");
-	assert.equal(i18n.createTranslator("pt-BR", await i18n.loadMessages("pt-BR"))("navigation.inbox", { count: 2 }), "Caixa de entrada");
+	assert.equal(i18n.createTranslator("pt-BR", await i18n.loadMessages("pt-BR"))("navigation.inbox", { count: 2 }), "Entrada");
 	assert.equal(i18n.getDirection("en"), "ltr");
 });

@@ -10,6 +10,7 @@ const emptyCounts: MessageCounts = {
 		starred: { total: 0, unread: 0 },
 		snoozed: { total: 0, unread: 0 },
 		sent: { total: 0, unread: 0 },
+		scheduled: { total: 0, unread: 0 },
 		drafts: { total: 0, unread: 0 },
 		archived: { total: 0, unread: 0 },
 		spam: { total: 0, unread: 0 },
@@ -63,7 +64,7 @@ export function useMessageCounts(mailboxId?: string | null, enabled = true) {
 					...current.folders,
 					inbox: {
 						...current.folders.inbox,
-						unread: Math.max(0, current.folders.inbox.unread + detail.inboxUnreadDelta),
+						unread: Math.max(0, current.folders.inbox.unread + (detail.inboxUnreadDelta ?? 0)),
 					},
 				},
 			}));

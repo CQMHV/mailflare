@@ -99,7 +99,7 @@ export default function MailboxAvatarForm({
 					)}
 				</span>
 			</button>
-			{status && <p className="max-w-xs text-xs text-red-600">{status}</p>}
+			{status && <p role="alert" className="max-w-xs text-xs text-red-600">{status}</p>}
 		</div>
 	);
 }

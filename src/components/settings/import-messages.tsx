@@ -75,7 +75,7 @@ export function ImportMessages({ destination, sourceLabel }: ImportMessagesProps
 							<p className="font-medium">{getImportSummary(result, t)}</p>
 							{(result.errors ?? []).length > 0 && (
 								<ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
-									{result.errors.slice(0, 5).map((item) => (
+									{(result.errors ?? []).slice(0, 5).map((item) => (
 										<li key={item}>{item}</li>
 									))}
 								</ul>

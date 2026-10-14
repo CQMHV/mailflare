@@ -103,7 +103,7 @@ export function LoginClient({ adding = false }: { adding?: boolean }) {
             />
           </div>
           {error && (
-            <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            <p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
             </p>
           )}
@@ -144,6 +144,8 @@ export function LoginClient({ adding = false }: { adding?: boolean }) {
             name="email"
             type="email"
             autoComplete="email"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "login-error" : undefined}
             required
           />
         </div>
@@ -159,11 +161,13 @@ export function LoginClient({ adding = false }: { adding?: boolean }) {
             name="password"
             type="password"
             autoComplete="current-password"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "login-error" : undefined}
             required
           />
         </div>
         {error && (
-          <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          <p id="login-error" role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             {error}
           </p>
         )}

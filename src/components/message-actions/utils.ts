@@ -1,5 +1,6 @@
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
 import { authFetch } from "@/lib/auth/client";
+import { throwIfDeleteSkipped } from "@/lib/messages/permanent-delete-utils";
 import { markMessagesReadInCaches } from "@/hooks/utils";
 import { getEmailAddress, normalizeEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getLatestEmailContent } from "@/lib/email/reply-content-utils";
@@ -51,6 +52,7 @@ export async function runSingleMessageAction(
     throw new Error("Unable to update message");
   }
 
+  await throwIfDeleteSkipped(response, action);
   if (action === "read" || action === "unread") markMessagesReadInCaches([messageId], action === "read");
   window.dispatchEvent(new Event("mailflare:messages-changed"));
 }
@@ -121,19 +123,16 @@ export function getMoveMessageActions(
 
 export function getMessageActionRedirect(
   action: BulkMessageAction,
-  direction: "inbound" | "outbound",
+  listHref: string,
 ) {
-  if (action === "trash") return "/trash";
-  if (action === "spam") return "/spam";
-  if (action === "archive") return "/archived";
-  if (action === "inbox") return "/inbox";
+  if (action === "trash" || action === "spam" || action === "archive" || action === "inbox") return listHref;
   return null;
 }
 
 export function buildReplySubject(subject: string | null | undefined) {
   const trimmed = (subject ?? "").trim();
   if (!trimmed) return "Re:";
-  return /^re:/i.test(trimmed) ? trimmed : `Re: ${trimmed}`;
+  return /^re\s*(\[\d+\])?\s*:/i.test(trimmed) ? trimmed : `Re: ${trimmed}`;
 }
 
 export function buildReplyQuote(
@@ -170,7 +169,8 @@ export function buildReplyQuoteHtml(
 }
 
 /**
- * Who a reply goes to. A plain reply answers the sender; reply-all also keeps
+ * Who a reply goes to. A plain reply answers the sender, or the Reply-To
+ * addresses when the message names any (RFC 5322 §3.6.2); reply-all also keeps
  * everyone else on the To and Cc lines, minus the mailbox's own addresses.
  * The original sender stays even when the message came from another own alias.
  * Replying to a sent message re-addresses
@@ -197,7 +197,8 @@ export function getReplyRecipients(
     return { to, cc };
   }
 
-  const to = unique([message.fromAddr], false);
+  const replyTo = unique(splitEmailAddressList(message.replyTo));
+  const to = replyTo.length ? replyTo : unique([message.fromAddr], false);
   if (mode !== "replyAll") return { to, cc: [] };
   const cc = unique([...splitEmailAddressList(message.toAddr), ...splitEmailAddressList(message.ccAddr)]);
   return { to, cc };

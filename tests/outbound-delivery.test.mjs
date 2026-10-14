@@ -79,11 +79,17 @@ function fixture(options = {}) {
 			} }) }) };
 		},
 		update(table) {
-			return { set: values => ({ where: async condition => {
-				const failure = failures.find(item => item.table === table.name && item.status === values.status && item.remaining > 0);
-				if (failure) { failure.remaining -= 1; throw new Error(`Write failed: ${table.name}`); }
-				const row = rows[table.name].get(condition.value);
-				if (row) Object.assign(row, values);
+			return { set: values => ({ where: condition => {
+				const apply = async fields => {
+					const terms = Array.isArray(condition) ? condition : [condition];
+					const matching = [...rows[table.name].values()].filter(row => terms.every(term =>
+						Array.isArray(term.value) ? term.value.includes(row[term.column.name]) : row[term.column.name] === term.value));
+					const failure = failures.find(item => item.table === table.name && item.status === values.status && item.remaining > 0);
+					if (failure) { failure.remaining -= 1; throw new Error(`Write failed: ${table.name}`); }
+					for (const row of matching) Object.assign(row, values);
+					return fields ? matching.map(row => Object.fromEntries(Object.entries(fields).map(([key, column]) => [key, row[column.name]]))) : undefined;
+				};
+				return { then: (resolve, reject) => apply().then(resolve, reject), returning: fields => apply(fields) };
 			} }) };
 		},
 		insert(table) { return { values: async values => { rows[table.name].set(values.id, { ...values }); } }; },
@@ -160,7 +166,7 @@ test("webhook and audit failures after acceptance do not fail or resend the emai
 test("a job write failure after acceptance is recovered from the sent message without resending", async () => {
 	const state = fixture({ writeFailures: [{ table: "outboundJobs", status: "sent", remaining: 1 }] });
 	await captureErrors(state, () => processOutboundQueue(state.env, state.payload));
-	assert.equal(state.rows.outboundJobs.get("job_1").status, "queued");
+	assert.equal(state.rows.outboundJobs.get("job_1").status, "sending");
 	assert.equal(state.rows.messages.get("msg_1").status, "sent");
 	await processOutboundQueue(state.env, state.payload);
 	assert.equal(state.calls.sends.length, 1);

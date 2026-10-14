@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { messages, outboundJobs } from "@/db/schema";
 import { newId } from "@/lib/ids";
@@ -128,6 +128,7 @@ export async function sendEmail(
 		textBody: input.text ?? null,
 		htmlBody: input.html ?? null,
 		status: "queued",
+		read: true,
 		threadId: input.threadId ?? null,
 		inReplyTo,
 		references: references.length ? references.join(" ") : null,
@@ -359,5 +360,13 @@ export async function processOutboundQueue(
 		return;
 	}
 	delivery.attachments = await loadMessageAttachmentContents(env, payload.messageId);
+	// Claim the job before delivering. Cancelling deletes only a job that is still
+	// "queued", so exactly one of cancel and delivery wins.
+	const claimed = await db
+		.update(outboundJobs)
+		.set({ status: "sending", updatedAt: new Date() })
+		.where(and(eq(outboundJobs.id, payload.jobId), inArray(outboundJobs.status, ["queued", "failed"])))
+		.returning({ id: outboundJobs.id });
+	if (!claimed.length) return;
 	await deliverEmail(env, delivery);
 }

@@ -27,6 +27,7 @@ export default function SettingsExportPage() {
 
 	return (
 		<div className="space-y-6">
+			<h1 className="sr-only">{t("settings.nav.export")}</h1>
 			{/* <div>
 				<h1 className="text-2xl md:text-3xl font-medium text-neutral-900">Export</h1>
 				<p className="mt-1 text-sm text-neutral-500">

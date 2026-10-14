@@ -56,6 +56,15 @@ test("a message sent to the same own address can also be replied to", () => {
 	});
 });
 
+test("Reply-To takes precedence while an own-only Reply-To keeps the original own sender", () => {
+	assert.deepEqual(getReplyRecipients({ ...incoming, replyTo: "Support <support@example.net>" }, ownAddresses, "reply"), {
+		to: ["Support <support@example.net>"], cc: [],
+	});
+	assert.deepEqual(getReplyRecipients({ ...incoming, replyTo: "cqmhv@vrclearn.com" }, ownAddresses, "reply"), {
+		to: [incoming.fromAddr], cc: [],
+	});
+});
+
 test("reply-all keeps the own sender while removing other own addresses and duplicate recipients", () => {
 	const message = {
 		...incoming,

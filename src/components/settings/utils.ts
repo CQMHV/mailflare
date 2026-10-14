@@ -35,6 +35,7 @@ export async function updateCurrentMailboxName(id: string, displayName: string):
 
 	return {
 		id: data.mailbox.id,
+		domainId: data.mailbox.domainId,
 		localPart: data.mailbox.localPart,
 		hostname: data.mailbox.hostname,
 		displayName: data.mailbox.displayName,

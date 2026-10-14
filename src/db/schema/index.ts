@@ -27,6 +27,8 @@ export const users = sqliteTable("users", {
 	trashRetentionDays: integer("trash_retention_days"),
 	// Off shows the mailbox only. On shows Name <mailbox> on To, Cc, and Bcc.
 	showFullRecipientAddresses: integer("show_full_recipient_addresses", { mode: "boolean" }).notNull().default(false),
+	// When the reader loads remote images and styles without being asked: always ask, only for senders not yet allowed, or always.
+	remoteContentMode: text("remote_content_mode", { enum: ["ask", "new_sender", "allow"] }).notNull().default("allow"),
 	// TOTP second factor. The secret is written at enrolment and only counts
 	// once the user has proven a code from their authenticator.
 	totpSecret: text("totp_secret"),
@@ -170,6 +172,8 @@ export const contacts = sqliteTable(
 			.notNull()
 			.default("inbound"),
 		blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
+		// Set when the user allows remote content from this sender; "new_sender" mode loads it without asking afterwards.
+		remoteContentAllowed: integer("remote_content_allowed", { mode: "boolean" }).notNull().default(false),
 		lastSeenAt: integer("last_seen_at", { mode: "timestamp" }),
 		createdAt: integer("created_at", { mode: "timestamp" })
 			.notNull()
@@ -241,6 +245,8 @@ export const messages = sqliteTable(
 		toAddr: text("to_addr").notNull(),
 		ccAddr: text("cc_addr"),
 		bccAddr: text("bcc_addr"),
+		/** Full Reply-To header, comma-joined. Replies go here instead of `fromAddr` when set. */
+		replyTo: text("reply_to"),
 		subject: text("subject"),
 		snippet: text("snippet"),
 		textBody: text("text_body"),
@@ -378,7 +384,7 @@ export const outboundJobs = sqliteTable("outbound_jobs", {
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
 	messageId: text("message_id").references(() => messages.id, { onDelete: "set null" }),
-	status: text("status", { enum: ["queued", "sent", "failed"] }).notNull().default("queued"),
+	status: text("status", { enum: ["queued", "sending", "sent", "failed"] }).notNull().default("queued"),
 	payload: text("payload").notNull(),
 	error: text("error"),
 	scheduledAt: integer("scheduled_at", { mode: "timestamp" }),

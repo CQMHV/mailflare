@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { CalendarDays, Check, HardDrive, ChevronDown, Inbox, LogOut, Settings, ShieldCheck, UserPlus, UserRound, UsersRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useDismissible } from "@/components/use-dismissible";
 import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
@@ -142,14 +143,7 @@ export function MailboxSelector({ initialUser }: MailboxSelectorProps = {}) {
 	const ref = useRef<HTMLDivElement>(null);
 	const { counts } = useMessageCounts(null, open);
 
-	useEffect(() => {
-		function onPointerDown(event: PointerEvent) {
-			if (!ref.current?.contains(event.target as Node)) setOpen(false);
-		}
-
-		document.addEventListener("pointerdown", onPointerDown);
-		return () => document.removeEventListener("pointerdown", onPointerDown);
-	}, []);
+	useDismissible(open, () => setOpen(false), ref);
 
 	useEffect(() => {
 		authFetch("/api/auth/me", { redirectOnUnauthorized: false })

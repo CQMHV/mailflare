@@ -49,9 +49,9 @@ async function fixture(t, { rules = [], failAddress, slowAddress } = {}) {
 	t.after(() => assert.equal(database.forbiddenQueries.length, 0, "account runtime must not consult licenses"));
 	await applyMigrations(database, join(root, "drizzle/migrations"));
 	database.db.exec(`
-		INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES
-			('admin', 'owner@one.test', 'hash', 'Owner', 'admin', 1),
-			('other', 'owner@foreign.test', 'hash', 'Other', 'admin', 1);
+		INSERT INTO users (id, email, password_hash, name, role, is_primary_admin, created_at) VALUES
+			('admin', 'owner@one.test', 'hash', 'Owner', 'admin', 1, 1),
+			('other', 'owner@foreign.test', 'hash', 'Other', 'admin', 0, 1);
 		INSERT INTO domains (id, user_id, hostname, zone_id, status, created_at) VALUES
 			('one', 'admin', 'one.test', 'zone-one', 'active', 1),
 			('two', 'admin', 'two.test', 'zone-two', 'active', 1),

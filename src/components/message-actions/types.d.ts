@@ -43,7 +43,7 @@ export type ReplyMode = "reply" | "replyAll";
 
 export type ReplyableMessage = Pick<
 	Message,
-	"direction" | "fromAddr" | "toAddr" | "ccAddr" | "providerMessageId" | "references" | "threadId"
+	"direction" | "fromAddr" | "toAddr" | "ccAddr" | "replyTo" | "providerMessageId" | "references" | "threadId"
 >;
 
 export type ReplyRecipients = {

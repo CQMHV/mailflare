@@ -239,6 +239,14 @@ export const updateTrashRetentionSettingsSchema = z.object({
 	days: z.number().int().min(1).max(365).nullable(),
 });
 
+export const updateRemoteContentSettingsSchema = z.object({
+	mode: z.enum(["ask", "new_sender", "allow"]),
+});
+
+export const trustRemoteContentSenderSchema = z.object({
+	sender: z.string().trim().toLowerCase().email().max(320),
+});
+
 export const updateRecipientAddressSettingsSchema = z.object({
 	enabled: z.boolean(),
 });

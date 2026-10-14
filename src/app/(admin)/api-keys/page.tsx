@@ -117,7 +117,7 @@ export default function ApiKeysPage() {
 							</div>
 						</fieldset>
 						{create.isError && (
-							<p className="text-sm text-red-600">{(create.error as Error).message}</p>
+							<p role="alert" className="text-sm text-red-600">{(create.error as Error).message}</p>
 						)}
 						<Button
 							onClick={() => create.mutate()}

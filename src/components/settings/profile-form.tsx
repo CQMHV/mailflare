@@ -112,6 +112,7 @@ export function ProfileForm({
           <Label htmlFor="name">{t("common.name")}</Label>
           <Input
             id="name"
+            autoComplete="name"
             value={name}
             onChange={(event) => setName(event.target.value)}
             required
@@ -121,6 +122,7 @@ export function ProfileForm({
           <Label htmlFor="accountEmail">{t("settings.profile.currentEmail")}</Label>
           <Input
             id="accountEmail"
+            autoComplete="email"
             value={email}
             type="email"
             readOnly
@@ -158,6 +160,7 @@ export function ProfileForm({
           <Label htmlFor="resetEmail">{t("settings.profile.emailAddress")}</Label>
           <Input
             id="resetEmail"
+            autoComplete="email"
             value={resetEmail}
             onChange={(event) => setResetEmail(event.target.value)}
             type="email"

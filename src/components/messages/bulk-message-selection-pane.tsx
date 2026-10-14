@@ -6,6 +6,7 @@ import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
 import { useLanguage } from "@/components/language-provider";
 import { BulkMessageToolbar } from "./bulk-message-toolbar";
 import type { BulkMessageSelectionPaneProps } from "./types";
+import { PartialDeleteError } from "@/lib/messages/permanent-delete-utils";
 import { runBulkMessageAction } from "./utils";
 
 export function BulkMessageSelectionPane({
@@ -15,12 +16,14 @@ export function BulkMessageSelectionPane({
 }: BulkMessageSelectionPaneProps) {
 	const { t } = useLanguage();
 	const [pending, setPending] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 	const hasUnreadSelection = selectedMessages.some((message) => !message.read);
 
 	async function runAction(action: BulkMessageAction, folderId?: string) {
 		if (selectedMessages.length === 0) return;
 
 		setPending(true);
+		setError(null);
 		try {
 			await runBulkMessageAction(
 				selectedMessages.map((message) => message.id),
@@ -29,6 +32,8 @@ export function BulkMessageSelectionPane({
 				folderId,
 			);
 			onClearSelection();
+		} catch (actionError) {
+			setError(actionError instanceof PartialDeleteError ? t("actions.error.deleteSkipped") : t("actions.error.update"));
 		} finally {
 			setPending(false);
 		}
@@ -57,6 +62,7 @@ export function BulkMessageSelectionPane({
 						hideSelectedCount
 					/>
 				</div>
+				{error && <p role="alert" className="mt-3 text-sm font-medium text-red-700">{error}</p>}
 			</div>
 		</div>
 	);

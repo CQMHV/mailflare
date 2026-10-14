@@ -1,5 +1,6 @@
 "use client";
 
+import { SkipToContent } from "@/components/skip-to-content";
 import { Suspense } from "react";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { ComposeProvider } from "@/components/compose/compose-context";
@@ -12,12 +13,14 @@ import { SidebarResizeBoundary } from "@/components/sidebar-resize-boundary";
 import { SidebarProvider, useSidebar } from "@/components/sidebar-state";
 import { ShortcutsProvider } from "@/components/shortcuts";
 import { DriveNav } from "./drive-nav";
+import { RouteTitle } from "@/components/route-title";
 
 function DriveFrame({ children }: { children: React.ReactNode }) {
 	const { mobile, toggle } = useSidebar();
 	// Same grid and sidebar width as the dashboard, so the menu and the search line up and resizing carries over.
 	return (
 		<div className="grid h-dvh grid-cols-[minmax(0,1fr)] overflow-hidden bg-[#f6f8fc] transition-[grid-template-columns] md:grid-cols-[var(--sidebar-width)_minmax(0,1fr)]" style={{ transitionDuration: "var(--sidebar-transition-duration)" }}>
+			<SkipToContent />
 			<SidebarAside>
 				<div className="flex h-full min-h-0 flex-col">
 					<div className="shrink-0 px-3 pt-4"><SidebarHeader href="/inbox" /></div>
@@ -31,7 +34,7 @@ function DriveFrame({ children }: { children: React.ReactNode }) {
 					<div id="drive-header-slot" className="flex min-w-0 flex-1 items-center" />
 					<MailboxSelector />
 				</header>
-				<main className="min-h-0 min-w-0 flex-1 overflow-hidden md:pr-4">{children}</main>
+				<main id="main-content" tabIndex={-1} className="focus:outline-none min-h-0 min-w-0 flex-1 overflow-hidden md:pr-4">{children}</main>
 			</div>
 		</div>
 	);
@@ -45,6 +48,7 @@ export default function DriveLayout({ children }: { children: React.ReactNode })
 					<ComposeProvider>
 						<MailSearchProvider>
 							<ShortcutsProvider>
+							  <RouteTitle />
 								<DriveFrame>{children}</DriveFrame>
 							</ShortcutsProvider>
 						</MailSearchProvider>

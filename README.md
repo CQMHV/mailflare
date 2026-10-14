@@ -41,7 +41,7 @@ Want to support the mailflare? <a target="_blank" href="https://store.paymug.co/
 - **Admin**: Manage users, permissions, API keys, webhooks, audit logs, and backups.
 - **AI assistant**: Search your mail, draft replies, and manage calendar events with AI.
 - **MCP access**: Connect AI clients over MCP, with separate permissions for each key.
-- **Languages**: Use the interface in 33 languages: English, Português (Brasil), Português (Portugal), Español, Français, Deutsch, Italiano, Nederlands, Polski, Українська, Русский, Türkçe, 中文（简体）, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, Tiếng Việt, ไทย, हिन्दी, বাংলা, मराठी, తెలుగు, தமிழ், ગુજરાતી, ಕನ್ನಡ, മലയാളം, ਪੰਜਾਬੀ, Kiswahili, Hausa, plus العربية, اردو and فارسی (right-to-left).
+- **Languages**: Use the interface in 34 languages: English, Português (Brasil), Português (Portugal), Español, Français, Deutsch, Italiano, Nederlands, Polski, Українська, Русский, Türkçe, 中文（简体）, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, Tiếng Việt, ไทย, हिन्दी, বাংলা, मराठी, తెలుగు, தமிழ், ગુજરાતી, ಕನ್ನಡ, മലയാളം, ਪੰਜਾਬੀ, සිංහල, Kiswahili, Hausa, plus العربية, اردو and فارسی (right-to-left).
 
 ## How it works
 
@@ -133,11 +133,12 @@ npm run dev
 
 Add your Cloudflare credentials to `.dev.vars`, then open [http://localhost:3000](http://localhost:3000). To load sample data, run `npm run db:seed` while the dev server is running.
 
-The Cloudflare app uses vinext and the Cloudflare Vite plugin, with local D1, R2, Queues, and Durable Objects. Remote bindings are off by default. To use Workers AI locally, log in with Wrangler, set `CLOUDFLARE_ACCOUNT_ID`, and run `CLOUDFLARE_REMOTE_BINDINGS=true npm run dev`.
+The Cloudflare app uses Vite+, vinext, and the Cloudflare Vite plugin, with local D1, R2, Queues, and Durable Objects. Remote bindings are off by default. To use Workers AI locally, log in with Wrangler, set `CLOUDFLARE_ACCOUNT_ID`, and run `CLOUDFLARE_REMOTE_BINDINGS=true npm run dev`.
 
 - `npm run build`: build the full Worker.
 - `npm run start`: preview that build locally.
 - `npm run deploy`: build and deploy.
+- `npm run lint`: run Vite+ lint and type checks, including the existing Next.js and React rules.
 
 The Node/Docker runtime still uses Next.js with `build:node`, `start:node`, and `dev:node`.
 
