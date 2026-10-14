@@ -7,17 +7,30 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	applyDatabaseMigrations,
+	getDeploymentStatus,
 	getMigrationStatus,
 } from "./admin-update-card-utils";
 import type { MigrationStatusResponse } from "./admin-update-card-types";
+import { forkDeployment } from "@/lib/fork-deployment-config";
+import type { DeploymentStatusResponse } from "@/lib/fork-deployment-types";
 import packageMetadata from "../../package.json";
 
-// Installation-specific deployment links; keep in sync with docs/fork-maintenance.md.
-const repositoryUrl = "https://github.com/CQMHV/mailflare";
-const deploymentsUrl = "https://dash.cloudflare.com/ed7beef1c506866d938a47bc0e96047b/workers/services/view/mailflare/production/builds";
+const { repositoryUrl, deploymentsUrl } = forkDeployment;
+const deploymentLabels = {
+	success: "update.deploymentSuccess",
+	failure: "update.deploymentFailure",
+	running: "update.deploymentRunning",
+	queued: "update.deploymentQueued",
+	cancelled: "update.deploymentCancelled",
+	skipped: "update.deploymentSkipped",
+	unknown: "update.deploymentUnknown",
+} as const;
 
 export function AdminUpdateCard() {
-	const { t } = useLanguage();
+	const { t, locale } = useLanguage();
+	const [deploymentStatus, setDeploymentStatus] = useState<DeploymentStatusResponse>();
+	const [deploymentError, setDeploymentError] = useState(false);
+	const [isCheckingDeployment, setIsCheckingDeployment] = useState(true);
 	const [migrationError, setMigrationError] = useState("");
 	const [migrationStatus, setMigrationStatus] = useState<MigrationStatusResponse>();
 	const [isCheckingMigrations, setIsCheckingMigrations] = useState(true);
@@ -25,6 +38,17 @@ export function AdminUpdateCard() {
 
 	useEffect(() => {
 		let isActive = true;
+
+		getDeploymentStatus()
+			.then((status) => {
+				if (isActive) setDeploymentStatus(status);
+			})
+			.catch(() => {
+				if (isActive) setDeploymentError(true);
+			})
+			.finally(() => {
+				if (isActive) setIsCheckingDeployment(false);
+			});
 
 		getMigrationStatus()
 			.then((databaseStatus) => {
@@ -44,6 +68,18 @@ export function AdminUpdateCard() {
 		};
 	}, []);
 
+	async function handleRefreshDeployment() {
+		setIsCheckingDeployment(true);
+		setDeploymentError(false);
+		try {
+			setDeploymentStatus(await getDeploymentStatus());
+		} catch {
+			setDeploymentError(true);
+		} finally {
+			setIsCheckingDeployment(false);
+		}
+	}
+
 	async function handleMigrate() {
 		setMigrationError("");
 		setIsMigrating(true);
@@ -57,6 +93,13 @@ export function AdminUpdateCard() {
 			setIsMigrating(false);
 		}
 	}
+
+	const deployment = deploymentStatus?.latest;
+	const deploymentTime = deployment?.completedAt ?? deployment?.startedAt;
+	const formattedDeploymentTime = deploymentTime ? new Intl.DateTimeFormat(locale, {
+		year: "numeric", month: "2-digit", day: "2-digit",
+		hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short",
+	}).format(new Date(deploymentTime)) : null;
 
 	return (
 		<Card className="rounded-3xl border-0 bg-white p-6">
@@ -75,11 +118,50 @@ export function AdminUpdateCard() {
 				<div className="space-y-3 rounded-2xl border border-neutral-100 px-4 py-4">
 					<p className="text-sm font-medium text-neutral-800">GitHub → Cloudflare Workers Builds</p>
 					<div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-neutral-600">
-						<a className="font-medium text-blue-700 hover:underline" href={`${repositoryUrl}/tree/main`} target="_blank" rel="noreferrer">
-							CQMHV/mailflare · main
+						<a className="font-medium text-blue-700 hover:underline" href={`${repositoryUrl}/tree/${forkDeployment.branch}`} target="_blank" rel="noreferrer">
+							{forkDeployment.repository} · {forkDeployment.branch}
 							<span className="sr-only"> ({t("common.opensInNewTab")})</span>
 						</a>
 						<span>Mailflare v{packageMetadata.version}</span>
+					</div>
+					<div className="space-y-3 border-t border-neutral-100 pt-3">
+						<div className="flex flex-wrap items-center justify-between gap-2">
+							<p className="text-sm font-medium text-neutral-800">{t("update.latestDeployment")}</p>
+							<button type="button" onClick={handleRefreshDeployment} disabled={isCheckingDeployment}
+								className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-700 hover:underline disabled:pointer-events-none disabled:opacity-50">
+								<RefreshCw className={`h-3.5 w-3.5 ${isCheckingDeployment ? "animate-spin" : ""}`} aria-hidden="true" />
+								{t("update.refreshDeployment")}
+							</button>
+						</div>
+						{isCheckingDeployment && !deploymentStatus && <Skeleton className="h-16 w-full rounded-xl" />}
+						{deploymentStatus?.headPending && deployment && (
+							<p className="text-sm text-amber-700">{t("update.deploymentHeadPending")}</p>
+						)}
+						{deployment && (
+							<div className="space-y-2 text-sm">
+								<a href={deployment.detailsUrl} target="_blank" rel="noreferrer"
+									className={`inline-flex items-center gap-1.5 font-medium hover:underline ${deployment.state === "success" ? "text-green-700" : deployment.state === "failure" ? "text-red-600" : "text-neutral-700"}`}>
+									{t(deploymentLabels[deployment.state])}
+									<ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+									<span className="sr-only"> ({t("common.opensInNewTab")})</span>
+								</a>
+								{formattedDeploymentTime && (
+									<p className="text-neutral-600">
+										{t(deployment.completedAt ? "update.deploymentCompletedAt" : "update.deploymentStartedAt")}{": "}
+										<time dateTime={deploymentTime ?? undefined}>{formattedDeploymentTime}</time>
+									</p>
+								)}
+								<p className="break-words text-neutral-600">
+									<a href={deployment.commitUrl} target="_blank" rel="noreferrer" className="font-mono font-medium text-blue-700 hover:underline">
+										{deployment.commit.slice(0, 7)}
+										<span className="sr-only"> ({t("common.opensInNewTab")})</span>
+									</a>{" · "}{deployment.commitMessage}
+								</p>
+							</div>
+						)}
+						{deploymentStatus && !deployment && <p className="text-sm text-neutral-600">{t("update.noDeployment")}</p>}
+						{deploymentError && <p role="alert" className="text-sm text-amber-700">{t("update.deploymentUnavailable")}</p>}
+						<p className="text-xs text-neutral-500">{t("update.deploymentDelay")}</p>
 					</div>
 					<div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
 						<a className="inline-flex items-center gap-1.5 font-medium text-blue-700 hover:underline" href={deploymentsUrl} target="_blank" rel="noreferrer">

@@ -131,8 +131,26 @@ production `main` branch, GitHub checks and the existing Worker's build history,
 and shows the running package version. It does not query or dispatch the
 upstream one-click updater, so `GITHUB_UPDATE_TOKEN` and `GITHUB_UPDATE_REPO`
 are not needed for this dashboard. Deployment success is checked in the linked
-build history; the card does not claim to monitor live build status. Database
-migration checks and actions remain independent and require the primary admin.
+build history. The card also retrieves Cloudflare's public GitHub check runs via
+the primary-admin-only `/api/admin/deployment` endpoint. It reads the five most
+recent `main` commits, accepts only `Workers Builds: mailflare` results from the
+Cloudflare GitHub app with a matching production build URL, and shows the newest
+check run's status, reported timestamp and commit. Ordering uses check-run IDs,
+because Cloudflare can report the completion time as `started_at` as well. A
+newer head without a reported result is labelled separately, rather than inheriting an earlier deployment's
+success. Retries of commits outside this recent window and manual deployments
+without GitHub check runs remain available only in Cloudflare's build history.
+
+This read-only lookup uses the public repository and no runtime/deployment token,
+additional permissions, database tables or resources. Successful public GitHub
+responses are eligible for five-minute Cloudflare fetch caching; errors are not
+cached. The dashboard queries on opening and manual refresh, without background
+polling. GitHub reporting and caching may delay the status; this is not a direct
+live feed of Cloudflare's internal build stages. Rate limits and lookup errors
+are shown without claiming a successful deployment or removing migration checks.
+Database migration checks and actions remain independent and require the primary
+admin. Keep the installation metadata in `src/lib/fork-deployment-config.ts` in
+sync with the existing Worker and repository connection.
 
 ## Backups
 
