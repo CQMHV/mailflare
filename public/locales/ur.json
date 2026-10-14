@@ -915,6 +915,8 @@
 	"update.startFailed": "اپ ڈیٹ شروع نہیں ہو سکا",
 	"update.migrateFailed": "ڈیٹا بیس مائیگریشنز لاگو نہیں ہو سکیں",
 	"update.title": "ایپلیکیشن اپ ڈیٹ",
+	"update.gitDescription": "main کی اپ ڈیٹس Cloudflare Workers Builds خودکار طور پر بلڈ اور ڈپلائے کرتا ہے۔ ڈیٹابیس مائیگریشنز الگ سے جانچی جاتی ہیں۔",
+	"update.viewDeployments": "ڈپلائمنٹس دیکھیں",
 	"update.description": "تازہ ترین Mailflare ریلیز کو ہم آہنگ کریں اور اس کا ڈیٹا بیس اسکیما تازہ رکھیں۔",
 	"update.completeConfig": "مطلوبہ Cloudflare Worker ترتیب مکمل کریں:",
 	"update.configured": "ترتیب دیا گیا",

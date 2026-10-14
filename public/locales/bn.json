@@ -915,6 +915,8 @@
 	"update.startFailed": "আপডেট শুরু করা যায়নি",
 	"update.migrateFailed": "ডেটাবেস মাইগ্রেশন প্রয়োগ করা যায়নি",
 	"update.title": "অ্যাপ্লিকেশন আপডেট",
+	"update.gitDescription": "main-এর আপডেট Cloudflare Workers Builds স্বয়ংক্রিয়ভাবে বিল্ড ও ডিপ্লয় করে। ডেটাবেস মাইগ্রেশন আলাদাভাবে পরীক্ষা করা হয়।",
+	"update.viewDeployments": "ডিপ্লয়মেন্ট দেখুন",
 	"update.description": "সর্বশেষ Mailflare রিলিজ সিঙ্ক করুন এবং এর ডেটাবেস স্কিমা হালনাগাদ রাখুন।",
 	"update.completeConfig": "প্রয়োজনীয় Cloudflare Worker কনফিগারেশন সম্পূর্ণ করুন:",
 	"update.configured": "কনফিগার করা হয়েছে",

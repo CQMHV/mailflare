@@ -917,6 +917,8 @@
 	"update.startFailed": "Tidak dapat memulakan kemas kini",
 	"update.migrateFailed": "Tidak dapat menggunakan migrasi pangkalan data",
 	"update.title": "Kemas kini aplikasi",
+	"update.gitDescription": "Kemas kini main dibina dan digunakan secara automatik oleh Cloudflare Workers Builds. Migrasi pangkalan data diperiksa secara berasingan.",
+	"update.viewDeployments": "Lihat pelaksanaan",
 	"update.description": "Segerakkan keluaran Mailflare terkini dan pastikan skema pangkalan datanya sentiasa terkini.",
 	"update.completeConfig": "Lengkapkan konfigurasi Cloudflare Worker yang diperlukan:",
 	"update.configured": "Dikonfigurasi",

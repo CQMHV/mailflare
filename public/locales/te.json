@@ -915,6 +915,8 @@
 	"update.startFailed": "నవీకరణను ప్రారంభించలేకపోయాం",
 	"update.migrateFailed": "డేటాబేస్ మైగ్రేషన్‌లను వర్తింపజేయలేకపోయాం",
 	"update.title": "అప్లికేషన్ నవీకరణ",
+	"update.gitDescription": "main అప్‌డేట్‌లను Cloudflare Workers Builds స్వయంచాలకంగా బిల్డ్ చేసి డిప్లాయ్ చేస్తుంది. డేటాబేస్ మైగ్రేషన్‌లను విడిగా తనిఖీ చేస్తారు.",
+	"update.viewDeployments": "డిప్లాయ్‌మెంట్‌లను చూడండి",
 	"update.description": "తాజా Mailflare విడుదలను సింక్ చేసి, దాని డేటాబేస్ స్కీమాను తాజాగా ఉంచండి.",
 	"update.completeConfig": "అవసరమైన Cloudflare Worker కాన్ఫిగరేషన్‌ను పూర్తి చేయండి:",
 	"update.configured": "కాన్ఫిగర్ చేయబడింది",

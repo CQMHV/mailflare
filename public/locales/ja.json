@@ -911,6 +911,8 @@
 	"update.startFailed": "アップデートを開始できませんでした",
 	"update.migrateFailed": "データベースの移行を適用できませんでした",
 	"update.title": "アプリケーションのアップデート",
+	"update.gitDescription": "main の更新は Cloudflare Workers Builds により自動的にビルド・デプロイされます。データベースのマイグレーションは個別に確認します。",
+	"update.viewDeployments": "デプロイ履歴を表示",
 	"update.description": "最新の Mailflare リリースを同期し、データベーススキーマを最新の状態に保ちます。",
 	"update.completeConfig": "必要な Cloudflare Worker の設定を完了してください：",
 	"update.configured": "設定済み",

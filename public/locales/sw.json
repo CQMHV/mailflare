@@ -917,6 +917,8 @@
 	"update.startFailed": "Imeshindwa kuanzisha sasisho",
 	"update.migrateFailed": "Imeshindwa kutumia uhamishaji wa hifadhidata",
 	"update.title": "Sasisho la programu",
+	"update.gitDescription": "Masasisho ya main yanajengwa na kupelekwa kiotomatiki na Cloudflare Workers Builds. Uhamishaji wa hifadhidata unakaguliwa kando.",
+	"update.viewDeployments": "Angalia upelekaji",
 	"update.description": "Sawazisha toleo jipya la Mailflare na uweke muundo wa hifadhidata yake kuwa wa kisasa.",
 	"update.completeConfig": "Kamilisha usanidi unaohitajika wa Cloudflare Worker:",
 	"update.configured": "Imesanidiwa",

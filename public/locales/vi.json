@@ -911,6 +911,8 @@
 	"update.startFailed": "Không thể bắt đầu cập nhật",
 	"update.migrateFailed": "Không thể áp dụng các lần di chuyển cơ sở dữ liệu",
 	"update.title": "Cập nhật ứng dụng",
+	"update.gitDescription": "Cloudflare Workers Builds tự động dựng và triển khai các cập nhật của main. Các di chuyển cơ sở dữ liệu được kiểm tra riêng.",
+	"update.viewDeployments": "Xem các bản triển khai",
 	"update.description": "Đồng bộ bản phát hành Mailflare mới nhất và giữ lược đồ cơ sở dữ liệu luôn cập nhật.",
 	"update.completeConfig": "Hoàn tất cấu hình Cloudflare Worker bắt buộc:",
 	"update.configured": "Đã cấu hình",

@@ -941,6 +941,8 @@
 	"update.startFailed": "تعذّر بدء التحديث",
 	"update.migrateFailed": "تعذّر تطبيق ترحيلات قاعدة البيانات",
 	"update.title": "تحديث التطبيق",
+	"update.gitDescription": "تُبنى تحديثات main وتُنشر تلقائيًا بواسطة Cloudflare Workers Builds. تُفحص ترحيلات قاعدة البيانات بشكل منفصل.",
+	"update.viewDeployments": "عرض عمليات النشر",
 	"update.description": "زامِن أحدث إصدار من Mailflare وأبقِ مخطط قاعدة البيانات محدّثًا.",
 	"update.completeConfig": "أكمل إعدادات Cloudflare Worker المطلوبة:",
 	"update.configured": "مُهيَّأ",

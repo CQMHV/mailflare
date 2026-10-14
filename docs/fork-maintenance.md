@@ -123,9 +123,16 @@ npm run build
 The inherited `deploy-update.yml` workflow has been changed to perform a normal
 Git merge, verify the fork tests and build, then push without force. A conflict or
 failed check stops the workflow before pushing. It no longer replaces the entire
-tracked tree with upstream. The dashboard updater still requires the upstream
-documented GitHub update credentials; those credentials are not created or stored
-by this fork setup.
+tracked tree with upstream.
+
+The admin dashboard's Application update card describes this installation's
+GitHub → Cloudflare Workers Builds deployment, links to `CQMHV/mailflare`'s
+production `main` branch, GitHub checks and the existing Worker's build history,
+and shows the running package version. It does not query or dispatch the
+upstream one-click updater, so `GITHUB_UPDATE_TOKEN` and `GITHUB_UPDATE_REPO`
+are not needed for this dashboard. Deployment success is checked in the linked
+build history; the card does not claim to monitor live build status. Database
+migration checks and actions remain independent and require the primary admin.
 
 ## Backups
 

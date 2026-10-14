@@ -917,6 +917,8 @@
 	"update.startFailed": "અપડેટ શરૂ કરી શકાયું નથી",
 	"update.migrateFailed": "ડેટાબેઝ માઇગ્રેશન લાગુ કરી શકાયા નથી",
 	"update.title": "ઍપ્લિકેશન અપડેટ",
+	"update.gitDescription": "main ના અપડેટ Cloudflare Workers Builds દ્વારા આપમેળે બિલ્ડ અને ડિપ્લોય થાય છે. ડેટાબેસ માઇગ્રેશન અલગથી તપાસવામાં આવે છે.",
+	"update.viewDeployments": "ડિપ્લોયમેન્ટ જુઓ",
 	"update.description": "નવીનતમ Mailflare રિલીઝ સમન્વયિત કરો અને તેનો ડેટાબેઝ સ્કીમા અદ્યતન રાખો.",
 	"update.completeConfig": "જરૂરી Cloudflare Worker રૂપરેખાંકન પૂર્ણ કરો:",
 	"update.configured": "ગોઠવાયેલું",

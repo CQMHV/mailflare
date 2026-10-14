@@ -917,6 +917,8 @@
 	"update.startFailed": "No se pudo iniciar la actualización",
 	"update.migrateFailed": "No se pudieron aplicar las migraciones de la base de datos",
 	"update.title": "Actualización de la aplicación",
+	"update.gitDescription": "Cloudflare Workers Builds compila y despliega automáticamente las actualizaciones de main. Las migraciones de la base de datos se comprueban por separado.",
+	"update.viewDeployments": "Ver despliegues",
 	"update.description": "Sincroniza la última versión de Mailflare y mantén actualizado el esquema de la base de datos.",
 	"update.completeConfig": "Completa la configuración necesaria del Cloudflare Worker:",
 	"update.configured": "Configurado",

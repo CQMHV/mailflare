@@ -917,6 +917,8 @@
 	"update.startFailed": "업데이트를 시작할 수 없습니다",
 	"update.migrateFailed": "데이터베이스 마이그레이션을 적용할 수 없습니다",
 	"update.title": "애플리케이션 업데이트",
+	"update.gitDescription": "main 업데이트는 Cloudflare Workers Builds에서 자동으로 빌드하고 배포합니다. 데이터베이스 마이그레이션은 별도로 확인합니다.",
+	"update.viewDeployments": "배포 기록 보기",
 	"update.description": "최신 Mailflare 릴리스를 동기화하고 데이터베이스 스키마를 최신 상태로 유지합니다.",
 	"update.completeConfig": "필요한 Cloudflare Worker 설정을 완료하세요:",
 	"update.configured": "설정됨",

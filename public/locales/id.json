@@ -911,6 +911,8 @@
 	"update.startFailed": "Tidak dapat memulai pembaruan",
 	"update.migrateFailed": "Tidak dapat menerapkan migrasi database",
 	"update.title": "Pembaruan aplikasi",
+	"update.gitDescription": "Pembaruan main otomatis dibangun dan diterapkan oleh Cloudflare Workers Builds. Migrasi basis data diperiksa secara terpisah.",
+	"update.viewDeployments": "Lihat penerapan",
 	"update.description": "Sinkronkan rilis Mailflare terbaru dan pertahankan skema database tetap mutakhir.",
 	"update.completeConfig": "Lengkapi konfigurasi Cloudflare Worker yang diperlukan:",
 	"update.configured": "Terkonfigurasi",

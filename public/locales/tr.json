@@ -925,6 +925,8 @@
 	"update.startFailed": "Güncelleme başlatılamadı",
 	"update.migrateFailed": "Veritabanı geçişleri uygulanamadı",
 	"update.title": "Uygulama güncellemesi",
+	"update.gitDescription": "main güncellemeleri Cloudflare Workers Builds tarafından otomatik olarak derlenir ve dağıtılır. Veritabanı geçişleri ayrı olarak kontrol edilir.",
+	"update.viewDeployments": "Dağıtımları görüntüle",
 	"update.description": "Mailflare sürümlerini kontrol edin ve veritabanı şemasını güncel tutun. Kendi sunucunuzda çalışan kurulumlar, yeni bir imaj dağıtılarak veya kaynaktan yeniden derlenerek güncellenir.",
 	"update.completeConfig": "Gerekli Cloudflare Worker yapılandırmasını tamamlayın:",
 	"update.configured": "Yapılandırıldı",

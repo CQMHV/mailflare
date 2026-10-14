@@ -1,45 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, CircleX, Database, RefreshCw } from "lucide-react";
+import { CheckCircle2, CircleX, Database, ExternalLink, RefreshCw } from "lucide-react";
 import { useLanguage } from "@/components/language-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	applyDatabaseMigrations,
-	getApplicationUpdateStatus,
 	getMigrationStatus,
-	triggerApplicationUpdate,
 } from "./admin-update-card-utils";
-import type { MigrationStatusResponse, UpdateStatusResponse, UpdateWorkflowResponse } from "./admin-update-card-types";
+import type { MigrationStatusResponse } from "./admin-update-card-types";
+import packageMetadata from "../../package.json";
+
+// Installation-specific deployment links; keep in sync with docs/fork-maintenance.md.
+const repositoryUrl = "https://github.com/CQMHV/mailflare";
+const deploymentsUrl = "https://dash.cloudflare.com/ed7beef1c506866d938a47bc0e96047b/workers/services/view/mailflare/production/builds";
 
 export function AdminUpdateCard() {
 	const { t } = useLanguage();
-	const [status, setStatus] = useState<UpdateStatusResponse>();
-	const [result, setResult] = useState<UpdateWorkflowResponse>();
-	const [error, setError] = useState("");
 	const [migrationError, setMigrationError] = useState("");
 	const [migrationStatus, setMigrationStatus] = useState<MigrationStatusResponse>();
-	const [isChecking, setIsChecking] = useState(true);
 	const [isCheckingMigrations, setIsCheckingMigrations] = useState(true);
-	const [isPending, setIsPending] = useState(false);
 	const [isMigrating, setIsMigrating] = useState(false);
 
 	useEffect(() => {
 		let isActive = true;
-
-		getApplicationUpdateStatus()
-			.then((updateStatus) => {
-				if (isActive) setStatus(updateStatus);
-			})
-			.catch((statusError) => {
-				if (isActive) {
-					setError(statusError instanceof Error ? statusError.message : t("update.checkFailed"));
-				}
-			})
-			.finally(() => {
-				if (isActive) setIsChecking(false);
-			});
 
 		getMigrationStatus()
 			.then((databaseStatus) => {
@@ -58,20 +43,6 @@ export function AdminUpdateCard() {
 			isActive = false;
 		};
 	}, []);
-
-	async function handleUpdate() {
-		setError("");
-		setResult(undefined);
-		setIsPending(true);
-
-		try {
-			setResult(await triggerApplicationUpdate());
-		} catch (updateError) {
-			setError(updateError instanceof Error ? updateError.message : t("update.startFailed"));
-		} finally {
-			setIsPending(false);
-		}
-	}
 
 	async function handleMigrate() {
 		setMigrationError("");
@@ -96,64 +67,33 @@ export function AdminUpdateCard() {
 				<div>
 					<CardTitle className="text-base">{t("update.title")}</CardTitle>
 					<p className="mt-1 text-sm text-neutral-500">
-						{t("update.description")}
+						{t("update.gitDescription")}
 					</p>
 				</div>
 			</CardHeader>
 			<CardContent className="space-y-5 pt-5">
-				{isChecking && <Skeleton className="h-20 w-full rounded-2xl" />}
-
-				{!isChecking && status?.configured === false && (
-					<div className="space-y-3">
-						<p className="text-sm text-neutral-600">
-							{status.configuration?.length ? t("update.completeConfig") : t("update.selfHosted")}
-						</p>
-						{!!status.configuration?.length && (
-							<ul className="divide-y divide-neutral-100 overflow-hidden rounded-2xl border border-neutral-100">
-								{status.configuration.map((item) => (
-									<li key={item.name} className="flex items-center gap-3 px-4 py-3 text-sm">
-										{item.configured ? (
-											<CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
-										) : (
-											<CircleX className="h-4 w-4 shrink-0 text-red-600" />
-										)}
-										<code className="text-xs font-medium text-neutral-800">{item.name}</code>
-										<span className={`ml-auto text-xs font-medium ${item.configured ? "text-green-700" : "text-red-600"}`}>
-											{item.configured ? t("update.configured") : t("update.missing")}
-										</span>
-									</li>
-								))}
-							</ul>
-						)}
+				<div className="space-y-3 rounded-2xl border border-neutral-100 px-4 py-4">
+					<p className="text-sm font-medium text-neutral-800">GitHub → Cloudflare Workers Builds</p>
+					<div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-neutral-600">
+						<a className="font-medium text-blue-700 hover:underline" href={`${repositoryUrl}/tree/main`} target="_blank" rel="noreferrer">
+							CQMHV/mailflare · main
+							<span className="sr-only"> ({t("common.opensInNewTab")})</span>
+						</a>
+						<span>Mailflare v{packageMetadata.version}</span>
 					</div>
-				)}
-
-				{!isChecking && status?.configured && (
-					<div className="divide-y divide-neutral-100 overflow-hidden rounded-2xl border border-neutral-100">
-						<div className="flex items-center gap-3 px-4 py-4">
-							{status.available ? (
-								<RefreshCw className={`h-4 w-4 shrink-0 text-blue-600 ${isPending ? "animate-spin" : ""}`} />
-							) : (
-								<CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
-							)}
-							<p className="min-w-0 text-sm text-neutral-700">
-								{status.available
-									? t("update.available", { target: status.targetVersion, current: status.currentVersion })
-									: t("update.upToDate", { current: status.currentVersion })}
-							</p>
-							{status.available && (
-								<button
-									type="button"
-									onClick={handleUpdate}
-									disabled={isPending}
-									className="ml-auto shrink-0 text-sm font-medium text-blue-700 hover:underline disabled:pointer-events-none disabled:opacity-50"
-								>
-									{isPending ? t("update.starting") : t("update.updateButton")}
-								</button>
-							)}
-						</div>
+					<div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+						<a className="inline-flex items-center gap-1.5 font-medium text-blue-700 hover:underline" href={deploymentsUrl} target="_blank" rel="noreferrer">
+							{t("update.viewDeployments")}
+							<ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+							<span className="sr-only"> ({t("common.opensInNewTab")})</span>
+						</a>
+						<a className="inline-flex items-center gap-1.5 font-medium text-blue-700 hover:underline" href={`${repositoryUrl}/actions/workflows/fork-checks.yml?query=branch%3Amain`} target="_blank" rel="noreferrer">
+							GitHub · {t("update.viewWorkflow")}
+							<ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+							<span className="sr-only"> ({t("common.opensInNewTab")})</span>
+						</a>
 					</div>
-				)}
+				</div>
 
 				{(isCheckingMigrations || migrationStatus) && (
 					<div className="divide-y divide-neutral-100 overflow-hidden rounded-2xl border border-neutral-100">
@@ -197,18 +137,6 @@ export function AdminUpdateCard() {
 					</div>
 				)}
 
-				{result?.ok && (
-					<p className="text-sm text-green-700">
-						{t("update.started", { repo: result.repository, ref: result.ref })}{" "}
-						{result.runUrl && (
-							<a className="font-medium underline" href={result.runUrl} target="_blank" rel="noreferrer">
-								{t("update.viewWorkflow")}
-								<span className="sr-only"> ({t("common.opensInNewTab")})</span>
-							</a>
-						)}
-					</p>
-				)}
-				{error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 				{migrationError && <p role="alert" className="text-sm text-red-600">{migrationError}</p>}
 			</CardContent>
 		</Card>

@@ -917,6 +917,8 @@
 	"update.startFailed": "புதுப்பிப்பைத் தொடங்க இயலவில்லை",
 	"update.migrateFailed": "தரவுத்தள இடமாற்றங்களைப் பயன்படுத்த இயலவில்லை",
 	"update.title": "பயன்பாட்டுப் புதுப்பிப்பு",
+	"update.gitDescription": "main புதுப்பிப்புகளை Cloudflare Workers Builds தானாக உருவாக்கி வெளியிடுகிறது. தரவுத்தள இடம்பெயர்வுகள் தனியாகச் சரிபார்க்கப்படுகின்றன.",
+	"update.viewDeployments": "வெளியீடுகளைக் காண்க",
 	"update.description": "சமீபத்திய Mailflare வெளியீட்டை ஒத்திசைத்து, அதன் தரவுத்தள ஸ்கீமாவைப் புதுப்பித்த நிலையில் வைத்திருக்கவும்.",
 	"update.completeConfig": "தேவையான Cloudflare Worker உள்ளமைவை முடிக்கவும்:",
 	"update.configured": "உள்ளமைக்கப்பட்டது",

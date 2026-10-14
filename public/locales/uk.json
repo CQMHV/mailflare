@@ -921,6 +921,8 @@
 	"update.startFailed": "Не вдалося почати оновлення",
 	"update.migrateFailed": "Не вдалося застосувати міграції бази даних",
 	"update.title": "Оновлення застосунку",
+	"update.gitDescription": "Cloudflare Workers Builds автоматично збирає та розгортає оновлення main. Міграції бази даних перевіряються окремо.",
+	"update.viewDeployments": "Переглянути розгортання",
 	"update.description": "Синхронізуйте останній випуск Mailflare та підтримуйте схему бази даних актуальною.",
 	"update.completeConfig": "Завершіть потрібну конфігурацію Cloudflare Worker:",
 	"update.configured": "Налаштовано",

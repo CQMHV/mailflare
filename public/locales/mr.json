@@ -915,6 +915,8 @@
 	"update.startFailed": "अद्यतन सुरू करता आले नाही",
 	"update.migrateFailed": "डेटाबेस स्थलांतरे लागू करता आली नाहीत",
 	"update.title": "अ‍ॅप्लिकेशन अद्यतन",
+	"update.gitDescription": "main मधील अपडेट Cloudflare Workers Builds द्वारे आपोआप बिल्ड आणि डिप्लॉय केले जातात. डेटाबेस स्थलांतर स्वतंत्रपणे तपासले जाते.",
+	"update.viewDeployments": "डिप्लॉयमेंट पहा",
 	"update.description": "नवीनतम Mailflare रिलीज सिंक करा आणि त्याचा डेटाबेस स्कीमा अद्ययावत ठेवा.",
 	"update.completeConfig": "आवश्यक Cloudflare Worker कॉन्फिगरेशन पूर्ण करा:",
 	"update.configured": "कॉन्फिगर केले",

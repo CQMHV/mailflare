@@ -917,6 +917,8 @@
 	"update.startFailed": "ไม่สามารถเริ่มการอัปเดตได้",
 	"update.migrateFailed": "ไม่สามารถใช้การย้ายฐานข้อมูลได้",
 	"update.title": "การอัปเดตแอปพลิเคชัน",
+	"update.gitDescription": "Cloudflare Workers Builds จะสร้างและปรับใช้อัปเดตของ main โดยอัตโนมัติ การย้ายฐานข้อมูลจะตรวจสอบแยกต่างหาก",
+	"update.viewDeployments": "ดูประวัติการปรับใช้",
 	"update.description": "ซิงก์รุ่นล่าสุดของ Mailflare และรักษาสคีมาฐานข้อมูลให้เป็นปัจจุบัน",
 	"update.completeConfig": "ตั้งค่า Cloudflare Worker ที่จำเป็นให้เสร็จ:",
 	"update.configured": "ตั้งค่าแล้ว",

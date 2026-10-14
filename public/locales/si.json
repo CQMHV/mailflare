@@ -929,6 +929,8 @@
 	"update.startFailed": "යාවත්කාලීන කිරීම ආරම්භ කළ නොහැකි විය",
 	"update.migrateFailed": "දත්ත සමුදා සංක්‍රමණ යෙදිය නොහැකි විය",
 	"update.title": "යෙදුම් යාවත්කාලීනය",
+	"update.gitDescription": "main යාවත්කාලීන Cloudflare Workers Builds මඟින් ස්වයංක්‍රීයව ගොඩනඟා යොදවයි. දත්ත සමුදා සංක්‍රමණ වෙනම පරීක්ෂා කරයි.",
+	"update.viewDeployments": "යෙදවීම් බලන්න",
 	"update.description": "නවතම Mailflare නිකුතුව සමමුහුර්ත කර එහි දත්ත සමුදා ක්‍රමානුරූපය යාවත්කාලීනව තබා ගන්න.",
 	"update.completeConfig": "අවශ්‍ය Cloudflare Worker වින්‍යාසය සම්පූර්ණ කරන්න:",
 	"update.configured": "වින්‍යාස කර ඇත",

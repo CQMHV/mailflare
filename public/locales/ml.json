@@ -917,6 +917,8 @@
 	"update.startFailed": "അപ്ഡേറ്റ് ആരംഭിക്കാൻ കഴിഞ്ഞില്ല",
 	"update.migrateFailed": "ഡാറ്റാബേസ് മൈഗ്രേഷനുകൾ പ്രയോഗിക്കാൻ കഴിഞ്ഞില്ല",
 	"update.title": "ആപ്ലിക്കേഷൻ അപ്ഡേറ്റ്",
+	"update.gitDescription": "main അപ്‌ഡേറ്റുകൾ Cloudflare Workers Builds സ്വയമേവ ബിൽഡ് ചെയ്ത് വിന്യസിക്കുന്നു. ഡാറ്റാബേസ് മൈഗ്രേഷനുകൾ പ്രത്യേകം പരിശോധിക്കുന്നു.",
+	"update.viewDeployments": "വിന്യാസങ്ങൾ കാണുക",
 	"update.description": "ഏറ്റവും പുതിയ Mailflare റിലീസ് സമന്വയിപ്പിച്ച് അതിന്റെ ഡാറ്റാബേസ് സ്കീമ കാലികമായി നിലനിർത്തുക.",
 	"update.completeConfig": "ആവശ്യമായ Cloudflare Worker കോൺഫിഗറേഷൻ പൂർത്തിയാക്കുക:",
 	"update.configured": "കോൺഫിഗർ ചെയ്തു",

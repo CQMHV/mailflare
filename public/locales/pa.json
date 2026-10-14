@@ -917,6 +917,8 @@
 	"update.startFailed": "ਅੱਪਡੇਟ ਸ਼ੁਰੂ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ",
 	"update.migrateFailed": "ਡਾਟਾਬੇਸ ਮਾਈਗ੍ਰੇਸ਼ਨ ਲਾਗੂ ਨਹੀਂ ਕੀਤੇ ਜਾ ਸਕੇ",
 	"update.title": "ਐਪਲੀਕੇਸ਼ਨ ਅੱਪਡੇਟ",
+	"update.gitDescription": "main ਦੇ ਅੱਪਡੇਟ Cloudflare Workers Builds ਦੁਆਰਾ ਆਪਣੇ ਆਪ ਬਿਲਡ ਅਤੇ ਡਿਪਲੌਇ ਕੀਤੇ ਜਾਂਦੇ ਹਨ। ਡਾਟਾਬੇਸ ਮਾਈਗ੍ਰੇਸ਼ਨ ਵੱਖਰੇ ਤੌਰ ਉੱਤੇ ਜਾਂਚੇ ਜਾਂਦੇ ਹਨ।",
+	"update.viewDeployments": "ਡਿਪਲੌਇਮੈਂਟ ਵੇਖੋ",
 	"update.description": "ਨਵੀਨਤਮ Mailflare ਰਿਲੀਜ਼ ਨੂੰ ਸਿੰਕ ਕਰੋ ਅਤੇ ਇਸਦੀ ਡਾਟਾਬੇਸ ਸਕੀਮਾ ਨੂੰ ਅੱਪ-ਟੂ-ਡੇਟ ਰੱਖੋ।",
 	"update.completeConfig": "ਲੋੜੀਂਦੀ Cloudflare Worker ਸੰਰਚਨਾ ਪੂਰੀ ਕਰੋ:",
 	"update.configured": "ਸੰਰਚਿਤ",

@@ -917,6 +917,8 @@
 	"update.startFailed": "Ba a iya fara sabuntawa ba",
 	"update.migrateFailed": "Ba a iya aiwatar da canja-canjen bayanai ba",
 	"update.title": "Sabunta manhaja",
+	"update.gitDescription": "Cloudflare Workers Builds yana ginawa da tura sabuntawar main ta atomatik. Ana duba ƙaura na bayanan ajiya dabam.",
+	"update.viewDeployments": "Duba turawa",
 	"update.description": "Daidaita sabuwar fitowar Mailflare kuma kiyaye tsarin bayananta a zamani.",
 	"update.completeConfig": "Kammala saitin Cloudflare Worker da ake buƙata:",
 	"update.configured": "An saita",

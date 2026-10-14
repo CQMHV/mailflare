@@ -917,6 +917,8 @@
 	"update.startFailed": "Update starten mislukt",
 	"update.migrateFailed": "Databasemigraties toepassen mislukt",
 	"update.title": "Applicatie-update",
+	"update.gitDescription": "Cloudflare Workers Builds bouwt en implementeert wijzigingen aan main automatisch. Databasemigraties worden afzonderlijk gecontroleerd.",
+	"update.viewDeployments": "Implementaties bekijken",
 	"update.description": "Synchroniseer de nieuwste Mailflare-release en houd het databaseschema up-to-date.",
 	"update.completeConfig": "Voltooi de vereiste Cloudflare Worker-configuratie:",
 	"update.configured": "Geconfigureerd",

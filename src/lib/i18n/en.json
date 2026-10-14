@@ -945,6 +945,8 @@
 	"update.startFailed": "Could not start the update",
 	"update.migrateFailed": "Could not apply database migrations",
 	"update.title": "Application update",
+	"update.gitDescription": "Updates to main are automatically built and deployed by Cloudflare Workers Builds. Database migrations are checked separately.",
+	"update.viewDeployments": "View deployments",
 	"update.description": "Check for Mailflare releases and keep the database schema current. Self-hosted installs update by deploying a new image or rebuilding from source.",
 	"update.completeConfig": "Complete the required Cloudflare Worker configuration:",
 	"update.selfHosted": "Update this self-hosted installation by deploying a new image or rebuilding from updated source, then recreate the container.",
