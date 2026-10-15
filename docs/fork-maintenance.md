@@ -23,6 +23,14 @@ another account depends on its domains, aliases, shared mailboxes, authored mail
 or mixed-owner Drive folders. Reassign those dependencies before cleanup rather
 than allowing foreign-key cascades to remove other users' data.
 
+The later 2026-10-15 update merges upstream through `8a7ba96`, including the
+merged own-alias reply PR #145, authorized-admin domain routing (#147), the
+Workers remote-image proxy (#148) and bounded session-scoped client caches
+(#149). The own-alias reply implementation now matches upstream. This update
+needs no database migration, new binding, resource or secret. Verify the reply
+recipient, domain-routing permission, remote-image and client-cache test files
+alongside `npm run test:fork` when updating these paths.
+
 ## Configuration and data
 
 The committed `wrangler.jsonc` identifies the existing `mailflare` Worker, D1

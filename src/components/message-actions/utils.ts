@@ -173,8 +173,7 @@ export function buildReplyQuoteHtml(
  * addresses when the message names any (RFC 5322 §3.6.2); reply-all also keeps
  * everyone else on the To and Cc lines, minus the mailbox's own addresses.
  * The original sender stays even when the message came from another own alias.
- * Replying to a sent message re-addresses
- * its original recipients.
+ * Replying to a sent message re-addresses its original recipients.
  */
 export function getReplyRecipients(
   message: ReplyableMessage,
