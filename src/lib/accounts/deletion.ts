@@ -1,7 +1,6 @@
-import { and, eq, inArray, isNotNull, isNull, lte, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import { getDb } from "@/db";
-import { calendarEvents, domains, driveItems, mailboxAccess, mailboxAliases, mailboxes, messageAttachments, messages, outboundJobs, sessions, users } from "@/db/schema";
-import { alias } from "drizzle-orm/sqlite-core";
+import { calendarEvents, driveItems, mailboxes, messageAttachments, messages, sessions, users } from "@/db/schema";
 import { canManageUsers, isPrimaryAdmin } from "@/lib/auth/admin";
 import type { SessionUser } from "@/lib/auth/types";
 import { deleteDriveItems } from "@/lib/drive/access";
@@ -74,16 +73,6 @@ export async function deleteAccounts(env: CloudflareEnv, actor: SessionUser, inp
 	for (const group of chunks(ids)) {
 		await db.update(users).set({ deletedAt: now, disabled: true }).where(inArray(users.id, group));
 		await db.delete(sessions).where(inArray(sessions.userId, group));
-		// Keep cancelled scheduled mail as drafts; restoring an account must not restart old sends.
-		// A send already claimed as "sending" is left alone, as in cancelScheduledSend.
-		const authoredMessages = db.select({ id: messages.id }).from(messages).where(inArray(messages.userId, group));
-		const cancelled = await db.delete(outboundJobs)
-			.where(and(inArray(outboundJobs.messageId, authoredMessages), inArray(outboundJobs.status, ["queued", "failed"]), isNotNull(outboundJobs.scheduledAt)))
-			.returning({ messageId: outboundJobs.messageId });
-		for (const messageIds of chunks(cancelled.map((job) => job.messageId).filter((id): id is string => id !== null))) {
-			await db.update(messages).set({ status: "draft" })
-				.where(and(inArray(messages.id, messageIds), inArray(messages.status, ["queued", "failed"])));
-		}
 	}
 	return { ok: true, deleted: ids.length };
 }
@@ -99,41 +88,8 @@ export async function restoreAccount(env: CloudflareEnv, actor: SessionUser, id:
 	return { ok: true, deleted: 0 };
 }
 
-/** Do not let user/domain cascades remove another account's mailbox, alias or shared mail. */
-async function getPurgeDependency(env: CloudflareEnv, accountId: string): Promise<string | null> {
+async function purgeAccount(env: CloudflareEnv, account: typeof users.$inferSelect): Promise<void> {
 	const db = getDb(env);
-	const [domainMailbox] = await db.select({ id: mailboxes.id }).from(mailboxes)
-		.innerJoin(domains, eq(domains.id, mailboxes.domainId))
-		.where(and(eq(domains.userId, accountId), ne(mailboxes.userId, accountId))).limit(1);
-	if (domainMailbox) return "domain used by another account's mailbox";
-	const [domainAlias] = await db.select({ id: mailboxAliases.id }).from(mailboxAliases)
-		.innerJoin(domains, eq(domains.id, mailboxAliases.domainId))
-		.innerJoin(mailboxes, eq(mailboxes.id, mailboxAliases.mailboxId))
-		.where(and(eq(domains.userId, accountId), ne(mailboxes.userId, accountId))).limit(1);
-	if (domainAlias) return "domain used by another account's alias";
-	const [sharedAccess] = await db.select({ id: mailboxAccess.id }).from(mailboxAccess)
-		.innerJoin(mailboxes, eq(mailboxes.id, mailboxAccess.mailboxId))
-		.where(and(eq(mailboxes.userId, accountId), ne(mailboxAccess.userId, accountId))).limit(1);
-	if (sharedAccess) return "mailbox shared with another account";
-	const [sharedMessage] = await db.select({ id: messages.id }).from(messages)
-		.innerJoin(mailboxes, eq(mailboxes.id, messages.mailboxId))
-		.where(and(eq(messages.userId, accountId), ne(mailboxes.userId, accountId))).limit(1);
-	if (sharedMessage) return "messages in another account's mailbox";
-	const parent = alias(driveItems, "purge_parent");
-	const [sharedDriveItem] = await db.select({ id: driveItems.id }).from(driveItems)
-		.innerJoin(parent, eq(parent.id, driveItems.parentId))
-		.where(and(eq(parent.ownerId, accountId), ne(driveItems.ownerId, accountId))).limit(1);
-	if (sharedDriveItem) return "Drive folder contains another account's files";
-	return null;
-}
-
-async function purgeAccount(env: CloudflareEnv, account: typeof users.$inferSelect): Promise<boolean> {
-	const db = getDb(env);
-	const dependency = await getPurgeDependency(env, account.id);
-	if (dependency) {
-		console.warn("Account purge deferred: shared data must be reassigned first", { userId: account.id, reason: dependency });
-		return false;
-	}
 	const owned = await db.select().from(mailboxes).where(eq(mailboxes.userId, account.id));
 	for (const mailbox of owned) {
 		try {
@@ -152,7 +108,6 @@ async function purgeAccount(env: CloudflareEnv, account: typeof users.$inferSele
 	}
 	await env.BUCKET.delete(account.avatarKey ?? avatarKeyFor(account.id));
 	await db.delete(users).where(eq(users.id, account.id));
-	return true;
 }
 
 /** Removes accounts whose restore window has ended, with their data. Runs from the daily scheduled handler. */
@@ -162,7 +117,8 @@ export async function runAccountRetention(env: CloudflareEnv, now = new Date()):
 	let removed = 0;
 	for (const account of expired) {
 		try {
-			if (await purgeAccount(env, account)) removed += 1;
+			await purgeAccount(env, account);
+			removed += 1;
 		} catch (error) {
 			console.error("Account purge failed", { userId: account.id, error });
 		}

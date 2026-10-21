@@ -235,7 +235,9 @@ export async function processInboundMessage(
 		}
 	}
 
-	if (status !== "spam") {
+	if (status === "spam") {
+		console.info(`No notification for ${messageId}: filed as spam`);
+	} else {
 		const notificationUserIds = await getMailboxNotificationUserIds(
 			env,
 			decision.mailbox.mailboxId,

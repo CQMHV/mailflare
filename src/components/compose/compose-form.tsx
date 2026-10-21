@@ -49,7 +49,7 @@ export function ComposeForm({
 }) {
 	const { t } = useLanguage();
 	const router = useRouter();
-	const { showNotice } = useCompose();
+	const { showNotice, openDraftComposer } = useCompose();
 	const { selectedMailbox, setSelectedMailbox, mailboxes } = useSelectedMailbox();
 	const [draftId, setDraftId] = useState<string | null>(null);
 	const [agentRevision, setAgentRevision] = useState<number | null>(null);
@@ -363,7 +363,7 @@ export function ComposeForm({
 			return;
 		}
 		let res: Response;
-		let data: { messageId?: string; scheduled?: boolean; error?: string };
+		let data: { messageId?: string; scheduled?: boolean; undoSeconds?: number; error?: string };
 		try {
 			res = await authFetch("/api/send", {
 				method: "POST",
@@ -380,9 +380,10 @@ export function ComposeForm({
 					threading: threading ?? undefined,
 					draftId,
 					scheduledAt,
+					undoSend: true,
 				}),
 			});
-			data = (await res.json()) as { messageId?: string; scheduled?: boolean; error?: string };
+			data = (await res.json()) as { messageId?: string; scheduled?: boolean; undoSeconds?: number; error?: string };
 		} catch {
 			setLoading(false);
 			setToast({ type: "error", message: t("compose.error.sendFailed") });
@@ -415,7 +416,18 @@ export function ComposeForm({
 		setQuotedHtml(null);
 		setAttachments([]);
 		setScheduledAt(null);
-		showNotice(data.scheduled ? t("compose.scheduled") : t("compose.sent"));
+		const sentMessageId = data.messageId;
+		if (data.undoSeconds && sentMessageId) {
+			// The send is queued for the undo window; Cancel puts the message back in Drafts and reopens it.
+			showNotice(t("compose.sent"), {
+				durationMs: data.undoSeconds * 1000,
+				action: { label: t("compose.cancelSend"), onClick: () => void cancelSend(sentMessageId) },
+			});
+			// Refresh the lists once the queue has had time to deliver it.
+			setTimeout(() => window.dispatchEvent(new Event("mailflare:messages-changed")), (data.undoSeconds + 3) * 1000);
+		} else {
+			showNotice(data.scheduled ? t("compose.scheduled") : t("compose.sent"));
+		}
 		window.dispatchEvent(new Event("mailflare:messages-changed"));
 
 		if (onClose) {
@@ -423,6 +435,21 @@ export function ComposeForm({
 			return;
 		}
 		router.push("/sent");
+	}
+
+	async function cancelSend(messageId: string) {
+		try {
+			const res = await authFetch(`/api/messages/${messageId}/cancel-schedule`, { method: "POST" });
+			if (!res.ok) {
+				showNotice(t("compose.cancelTooLate"));
+				return;
+			}
+			showNotice(t("compose.sendCancelled"));
+			window.dispatchEvent(new Event("mailflare:messages-changed"));
+			openDraftComposer(messageId);
+		} catch {
+			showNotice(t("compose.cancelTooLate"));
+		}
 	}
 
 	async function deleteDraftAndClose() {

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { List } from "@/components/ui/list";
 import { CheckCircle2, LoaderCircle, Plus } from "lucide-react";
 import { authFetch } from "@/lib/auth/client";
@@ -36,6 +37,7 @@ export default function DomainsPage() {
   const managesDns = me?.managesDns ?? true;
   const [domainCheck, setDomainCheck] = useState<DomainPreflight | null>(null);
   const [domainChecking, setDomainChecking] = useState(false);
+  const [skipDns, setSkipDns] = useState(false);
   const [sendingProvider, setSendingProvider] = useState<SendingProvider>("cloudflare");
   const [receivingProvider, setReceivingProvider] = useState<ReceivingProvider>("cloudflare");
   const [domainCheckError, setDomainCheckError] = useState<string | null>(null);
@@ -63,7 +65,9 @@ export default function DomainsPage() {
     mutationFn: async () => {
       const normalized = hostname.toLowerCase().trim();
       let checkedDomain = domainCheck;
-      if (checkedDomain?.hostname !== normalized) {
+      if (skipDns) {
+        checkedDomain = { hostname: normalized, zone: { id: "manual", name: normalized } };
+      } else if (checkedDomain?.hostname !== normalized) {
         const result = await checkDomain(normalized);
         if (!result.ok || !result.domain) {
           throw new Error(result.error ?? t("onboarding.domainCheckFailed"));
@@ -79,6 +83,7 @@ export default function DomainsPage() {
         body: JSON.stringify({
           hostname: checkedDomain.hostname,
           enableRouting: true,
+          skipDns,
           sendingProvider,
           receivingProvider,
         }),
@@ -90,6 +95,7 @@ export default function DomainsPage() {
     onSuccess: () => {
       setHostname("");
       setDomainCheck(null);
+      setSkipDns(false);
       setSendingProvider("cloudflare");
       setReceivingProvider("cloudflare");
       setDomainCheckError(null);
@@ -258,7 +264,7 @@ export default function DomainsPage() {
 
   const inspectDomain = async () => {
     const normalized = hostname.toLowerCase().trim();
-    if (normalized.length < 3 || domainCheck?.hostname === normalized) return;
+    if (skipDns || normalized.length < 3 || domainCheck?.hostname === normalized) return;
 
     setDomainChecking(true);
     setDomainCheckError(null);
@@ -316,6 +322,24 @@ export default function DomainsPage() {
               </div>
               <div className="flex items-center justify-between gap-4 rounded-xl bg-neutral-50 px-4 py-3">
                 <div>
+                  <Label htmlFor="skip-dns">{t("setup.skipDns")}</Label>
+                  <p className="mt-1 text-xs leading-5 text-neutral-500">
+                    {skipDns ? t("setup.skipDnsOn") : t("setup.skipDnsHint")}
+                  </p>
+                </div>
+                <Switch
+                  id="skip-dns"
+                  checked={skipDns}
+                  onCheckedChange={(checked) => {
+                    setSkipDns(checked);
+                    setDomainCheckError(null);
+                  }}
+                />
+              </div>
+              {!skipDns && (
+                <>
+              <div className="flex items-center justify-between gap-4 rounded-xl bg-neutral-50 px-4 py-3">
+                <div>
                   <Label htmlFor="receiving-provider">{t("domains.receiveWith")}</Label>
                   <p className="mt-1 text-xs leading-5 text-neutral-500">
                     {receivingProvider === "cloudflare"
@@ -363,7 +387,9 @@ export default function DomainsPage() {
                   <option value="none">{t("domains.notSelected")}</option>
                 </select>
               </div>
-              {domainCheck && (
+                </>
+              )}
+              {domainCheck && !skipDns && (
                 <div className="flex items-center gap-3 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">
                   <CheckCircle2 className="h-4 w-4" />
                   {t("setup.domainFound", { zone: domainCheck.zone.name })}

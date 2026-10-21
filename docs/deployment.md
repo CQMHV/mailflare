@@ -2,8 +2,6 @@
 
 This guide covers Cloudflare deployment, runtime configuration, database backups, and application updates.
 
-This installation fork is already deployed. Follow [Fork maintenance](fork-maintenance.md) to update its existing Worker and bindings. The upstream one-click button below is for a fresh installation, not for redeploying this fork.
-
 ## Overview
 
 Set up Mailflare in three steps:
@@ -141,7 +139,7 @@ The assistant panel no longer exposes MCP key management. External MCP clients c
 
 ## Updating Mailflare
 
-In this installation fork, the **Update Mailflare** button dispatches `.github/workflows/deploy-update.yml`, which merges upstream into the installation branch without replacing its tracked tree. It verifies the fork regression tests and complete build before pushing. Conflicts or failed checks stop the update before anything is pushed. A connected Cloudflare Git integration then builds and deploys the accepted change. See [Fork maintenance](fork-maintenance.md) for the review-first update process and deployment configuration.
+The **Update Mailflare** button in the admin dashboard dispatches `.github/workflows/deploy-update.yml` in the installation repository. The workflow replaces the installation branch's complete tracked tree with the latest upstream source, commits that replacement, and pushes it. This avoids merge conflicts between independently created installation and upstream histories. Target-only committed files and code changes are intentionally removed; repository variables, secrets, and other GitHub or Cloudflare configuration remain unchanged. A connected Cloudflare Git integration then builds and deploys the change.
 
 ### Auto update
 
@@ -165,7 +163,7 @@ Configure the token and repository details in both Cloudflare and GitHub:
 
 The same token can be used for `GITHUB_UPDATE_TOKEN` and `MAILFLARE_UPDATE_TOKEN` when it has all three permissions above. Keep both values secret and limit the token's repository access to the installation repository.
 
-Keep this fork's `.github/workflows/deploy-update.yml` on the installation branch. Do not replace it with an upstream workflow that resets the tracked tree: that would remove installation-specific fixes and configuration. Review workflow changes when merging upstream. If GitHub update credentials have not been configured, use the local merge and deployment commands in [Fork maintenance](fork-maintenance.md).
+Make sure `.github/workflows/deploy-update.yml` exists on the installation branch. If it is missing, create the file and copy its contents from the [canonical Mailflare update workflow](https://github.com/hieunc229/mailflare/blob/main/.github/workflows/deploy-update.yml). If an older installation has a different updater, replace it with the latest canonical workflow once. A running workflow cannot create or replace itself until the current workflow has been installed manually.
 
 After the GitHub Action completes successfully, wait for the connected Cloudflare deployment to finish before refreshing Mailflare or applying pending database migrations. The workflow updates the repository first; the new application version is not live until Cloudflare completes its deployment.
 
@@ -179,8 +177,6 @@ New application releases must remain compatible with the previous schema until a
 
 When adding a schema change, create a new uniquely named SQL file in `drizzle/migrations` and do not edit an applied migration. Build and development commands generate the Worker migration bundle from those files. `npm run db:bundle` can generate it explicitly.
 
-## Branding and account administration
+## Branding license
 
-This fork includes branding, account administration, shared mailboxes and optional email forwarding without commercial activation. Only the primary admin can change branding; account administration and shared mailbox access retain their existing role, ownership and API-scope checks. No license key or payment service is required.
-
-Historical `license_settings` schema and migration files remain for restoring older full backups. They are unused by application feature checks. This change requires no database migration and preserves the project's AGPL license and copyright notices.
+Activate a purchased Pro or Team key from **Admin → Licenses**. Mailflare sends the key to Paymug and stores only a one-way hash and the activation state. Apply all D1 migrations before activating a license.

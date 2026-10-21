@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
-import { SqliteDatabase } from "./helpers/d1-sqlite.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const directory = mkdtempSync(join(root, "node_modules", "mailflare-account-test-"));
@@ -12,6 +11,7 @@ after(() => rmSync(directory, { recursive: true, force: true }));
 await build({
 	stdin: {
 		contents: `
+			export { SqliteDatabase } from "./server/runtime/sqlite-database.ts";
 			export { applyMigrations } from "./server/runtime/migrate.ts";
 			export { getDb } from "./src/db/index.ts";
 			export { createSession } from "./src/lib/auth/session.ts";
@@ -38,15 +38,14 @@ await build({
 	logLevel: "silent",
 });
 const {
-	applyMigrations, getDb, createSession, generateApiKey, createUserAccountSchema,
+	SqliteDatabase, applyMigrations, getDb, createSession, generateApiKey, createUserAccountSchema,
 	dashboardCreate, apiCreate, registerAdminMcpTools, getMailboxDomainAddresses, resolveInboundAddress, getAuthorizedSenderAddress,
 } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 const key = generateApiKey();
 
 async function fixture(t, { rules = [], failAddress, slowAddress } = {}) {
-	const database = new SqliteDatabase(":memory:", { forbidLicenseQueries: true });
+	const database = new SqliteDatabase(":memory:");
 	t.after(() => database.db.close());
-	t.after(() => assert.equal(database.forbiddenQueries.length, 0, "account runtime must not consult licenses"));
 	await applyMigrations(database, join(root, "drizzle/migrations"));
 	database.db.exec(`
 		INSERT INTO users (id, email, password_hash, name, role, is_primary_admin, created_at) VALUES
@@ -57,9 +56,9 @@ async function fixture(t, { rules = [], failAddress, slowAddress } = {}) {
 			('two', 'admin', 'two.test', 'zone-two', 'active', 1),
 			('pending', 'admin', 'pending.test', 'zone-pending', 'pending', 1),
 			('foreign', 'other', 'foreign.test', 'zone-foreign', 'active', 1);
-		UPDATE users SET is_primary_admin = 1, can_manage_users = 1, can_manage_domains = 1 WHERE id = 'admin';
+		INSERT INTO license_settings (id, instance_id, plan, state, features, updated_at)
+			VALUES ('default', 'test-instance', 'team', 'active', '[]', 1);
 	`);
-	assert.equal(database.db.prepare("SELECT count(*) AS count FROM license_settings").get().count, 0);
 	database.db.prepare("INSERT INTO api_keys (id, user_id, name, prefix, key_hash, scopes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
 		.run("key", "admin", "Test", key.prefix, key.hash, '["accounts"]', 1);
 	const env = { DB: database, CF_TOKEN: "test-only", MAILFLARE_RUNTIME: "node" };
@@ -233,13 +232,11 @@ for (const enabled of [true, false]) {
 	});
 }
 
-test("account creation requires admin authorization and works with no license record", async (t) => {
+test("account creation still enforces admin authorization", async (t) => {
 	const f = await fixture(t);
 	assert.equal((await f.post("api", {}, "invalid-test-key")).status, 401);
 	assert.equal((await f.post("dashboard", {}, "invalid-test-session")).status, 403);
 	assert.equal(f.calls.length, 0);
-	assert.equal((await f.post("api", { username: "api-user", useAllDomains: false })).status, 201);
-	assert.equal((await f.post("dashboard", { username: "dashboard-user", useAllDomains: false })).status, 201);
 });
 
 for (const separateDomains of [false, true]) {

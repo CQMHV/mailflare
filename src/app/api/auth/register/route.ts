@@ -75,6 +75,7 @@ export async function POST(request: Request) {
 			enableRouting: true,
 			enableSending: firstRunParsed.data.enableSending ?? true,
 			replaceMxRecords: firstRunParsed.data.replaceMxRecords,
+			skipDns: firstRunParsed.data.skipDns,
 		});
 		const domain = added.domain;
 		changes = added.changes;

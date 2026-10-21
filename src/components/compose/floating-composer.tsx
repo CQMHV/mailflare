@@ -28,8 +28,13 @@ export function FloatingComposer({ showButton = false }: { showButton?: boolean 
 				</button>
 			)}
 			{notice && (
-				<div role="status" className="fixed right-6 top-6 z-[60] rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
-					{notice}
+				<div role="status" className="fixed right-6 top-6 z-[60] flex items-center gap-4 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
+					{notice.message}
+					{notice.action && (
+						<button type="button" onClick={notice.action.onClick} className="rounded-md bg-white/20 px-2.5 py-1 font-semibold hover:bg-white/30">
+							{notice.action.label}
+						</button>
+					)}
 				</div>
 			)}
 			{open && <ComposeForm key={draftId ?? "new"} mode="popup" draftIdToLoad={draftId} onClose={() => {

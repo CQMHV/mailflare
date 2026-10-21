@@ -9,8 +9,15 @@ type ComposeContextValue = {
 	openComposer: () => void;
 	openDraftComposer: (draftId: string) => void;
 	closeComposer: () => void;
-	notice: string | null;
-	showNotice: (message: string) => void;
+	notice: ComposeNotice | null;
+	/** Shows a toast; `action` adds a button, `durationMs` overrides the default 3.2s. */
+	showNotice: (message: string | null, options?: { action?: { label: string; onClick: () => void }; durationMs?: number }) => void;
+};
+
+export type ComposeNotice = {
+	message: string;
+	action?: { label: string; onClick: () => void };
+	durationMs: number;
 };
 
 const ComposeContext = createContext<ComposeContextValue | null>(null);
@@ -29,11 +36,11 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 	function rememberOpener() {
 		opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 	}
-	const [notice, setNotice] = useState<string | null>(null);
+	const [notice, setNotice] = useState<ComposeNotice | null>(null);
 
 	useEffect(() => {
 		if (!notice) return;
-		const timer = setTimeout(() => setNotice(null), 3200);
+		const timer = setTimeout(() => setNotice(null), notice.durationMs);
 		return () => clearTimeout(timer);
 	}, [notice]);
 
@@ -60,7 +67,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 					if (previous) requestAnimationFrame(() => { if (previous.isConnected) previous.focus(); });
 				},
 				notice,
-				showNotice: setNotice,
+				showNotice: (message, options) => setNotice(message ? { message, action: options?.action, durationMs: options?.durationMs ?? 3200 } : null),
 			}}
 		>
 			{children}

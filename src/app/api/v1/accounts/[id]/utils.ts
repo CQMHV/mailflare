@@ -32,7 +32,6 @@ export async function PATCH(request: Request, { params }: AdminAccountRouteParam
 	const db = getDb(env);
 	const account = await selectAccountById(db, id);
 	if (!account || (account.id !== auth.userId && account.createdByUserId !== auth.userId)) return NextResponse.json({ error: "Account not found" }, { status: 404 });
-	if (account.deletedAt) return NextResponse.json({ error: "This account is deleted. Restore it first" }, { status: 409 });
 	const parsed = updateManagedAccountSchema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	if (!isPrimaryAdmin(auth.user) && (account.isPrimaryAdmin || account.role === "admin" || parsed.data.role !== account.role)) {

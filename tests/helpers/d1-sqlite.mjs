@@ -43,7 +43,7 @@ class Statement {
  * Real SQLite with D1 result shapes and atomic batch rollback, including Drizzle's raw rows.
  * This tests SQL and handlers locally; it does not simulate D1 networking, concurrency,
  * query limits, replica/session consistency, or production R2. License tracing is opt-in
- * for runtime feature tests, so backup/restore tests can use the retained historical table.
+ * so migrations can create the upstream schema before testing unlicensed features.
  */
 export class SqliteDatabase {
 	constructor(filename = ":memory:", { forbidLicenseQueries = false } = {}) {

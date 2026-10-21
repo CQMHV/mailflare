@@ -393,6 +393,27 @@
       "when": 1788850804023,
       "tag": "0063_add_account_deletion",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1788850805023,
+      "tag": "0064_add_jmap_changes_and_devices",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "6",
+      "when": 1788937205023,
+      "tag": "0065_push_devices_per_user",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1789023605023,
+      "tag": "0066_add_domain_dns_skipped",
+      "breakpoints": true
     }
   ]
 }

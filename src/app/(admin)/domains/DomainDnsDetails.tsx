@@ -23,7 +23,7 @@ export default function DomainDnsDetails({
 }: DomainDnsDetailsProps) {
 	const { t } = useLanguage();
 	const audit = dns.audit;
-	const manual = domain.zoneId === "manual";
+	const manual = domain.zoneId === "manual" && !domain.dnsSkipped;
 	const subdomain = dns.sendingSubdomain;
 	const sendingOk = subdomain ? dns.sendingEnabled : manual && domain.sendingEnabled;
 	const sendingLabel = subdomain

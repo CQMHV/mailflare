@@ -26,9 +26,6 @@
 	"images": {
 		"binding": "IMAGES",
 	},
-	"ai": {
-		"binding": "AI",
-	},
 	"services": [
 		{
 			"binding": "WORKER_SELF_REFERENCE",
@@ -64,6 +61,11 @@
 			},
 		},
 		{
+			"name": "DEVICE_LOGIN_RATE_LIMIT",
+			"namespace_id": "1003",
+			"simple": { "limit": 10, "period": 60 },
+		},
+		{
 			"name": "AGENT_RATE_LIMIT",
 			"namespace_id": "1002",
 			"simple": { "limit": 120, "period": 60 },
@@ -79,6 +81,7 @@
 			"remote": false,
 		},
 	],
+	"ai": { "binding": "AI" },
 	"d1_databases": [
 		{
 			"binding": "DB",

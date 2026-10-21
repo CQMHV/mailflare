@@ -1,4 +1,5 @@
 import { and, eq, gt, ne } from "drizzle-orm";
+import { revokeAllDeviceKeys } from "@/lib/auth/device-keys";
 import { newId } from "@/lib/ids";
 import { getDb } from "@/db";
 import { sessions, users } from "@/db/schema";
@@ -42,7 +43,7 @@ export async function getUserFromSession(
 	if (!session) return null;
 	const db = getDb(env);
 	const [user] = await db.select().from(users).where(eq(users.id, session.userId)).limit(1);
-	return user?.deletedAt ? null : user ?? null;
+	return user ?? null;
 }
 
 export async function getSessionFromToken(
@@ -70,8 +71,14 @@ export async function deleteSession(env: CloudflareEnv, token: string): Promise<
  * Sign the user out everywhere, optionally keeping the session that made the
  * request. Used after a password change or reset and when MFA is switched on.
  */
+/**
+ * Signs the user out everywhere: every session (but `keepToken`'s) and every
+ * mobile device key, so a password change or "sign out everywhere" also
+ * disconnects the apps.
+ */
 export async function deleteUserSessions(env: CloudflareEnv, userId: string, keepToken?: string): Promise<void> {
 	const db = getDb(env);
+	await revokeAllDeviceKeys(env, userId);
 	if (keepToken) {
 		const keepHash = await hashSessionToken(keepToken);
 		await db.delete(sessions).where(and(eq(sessions.userId, userId), ne(sessions.tokenHash, keepHash)));

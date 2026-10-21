@@ -1,11 +1,7 @@
-name: Merge Upstream Update
+name: Dashboard Update
 
 on:
   workflow_dispatch:
-
-concurrency:
-  group: upstream-update-${{ github.ref }}
-  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -32,7 +28,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.MAILFLARE_UPDATE_TOKEN }}
 
-      - name: Merge upstream source while preserving installation changes
+      - name: Replace repository with upstream source
         run: |
           set -euo pipefail
           git config user.name "mailflare-update"
@@ -52,27 +48,16 @@ jobs:
             exit 1
           fi
           upstream_ref="upstream/${upstream_branch}"
-          echo "Merging ${upstream_ref} into ${GITHUB_REF_NAME}."
-          if ! git merge --no-edit "${upstream_ref}"; then
-            git merge --abort
-            echo "::error::The upstream update conflicts with this fork. Resolve and review it locally; nothing has been pushed."
-            exit 1
+          echo "Replacing ${GITHUB_REF_NAME} with ${upstream_ref}."
+
+          # Keep the installation repository's commit history while replacing
+          # its complete tracked tree with the current upstream tree.
+          git read-tree --reset -u "${upstream_ref}"
+          if git diff --cached --quiet; then
+            echo "Repository is already up to date."
+            exit 0
           fi
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify installation fixes
-        run: npm run test:fork
-
-      - name: Build complete Worker
-        run: npm run build
+          git commit -m "Update Mailflare from ${UPDATE_SOURCE_REPOSITORY}@${upstream_branch}"
 
       - name: Push update
         run: |

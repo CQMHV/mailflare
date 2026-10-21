@@ -60,12 +60,6 @@ yarn.lock
 wrangler.prod.jsonc
 mailflare-landing
 
-# Local deployment diagnostics and generated artifacts
-/work-*.log
-/work-logs/
-/work-dry-run/
-/outputs/
-
 .agents
 skills-lock.json
 /dist/

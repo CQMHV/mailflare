@@ -1,7 +1,7 @@
 import { and, eq, lt, or, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { apiKeys, mcpKeyMailboxes, users } from "@/db/schema";
-import { parseScopes, verifyApiKey } from "@/lib/api-keys";
+import { apiKeyLookupPrefix, parseScopes, verifyApiKey } from "@/lib/api-keys";
 import type { ApiAuthResult } from "@/lib/api/key-auth-types";
 import { ADMIN_API_KEY_SCOPES } from "@/lib/api/scopes";
 
@@ -16,14 +16,14 @@ const ADMIN_SCOPES = new Set<string>(ADMIN_API_KEY_SCOPES);
 export async function authenticateApiKeyValue(env: CloudflareEnv, key: string): Promise<ApiAuthResult | null> {
 	const trimmed = key.trim();
 	if (!trimmed) return null;
-	const prefix = trimmed.slice(0, 12);
+	const prefix = apiKeyLookupPrefix(trimmed);
 	const db = getDb(env);
 	const candidates = await db.select().from(apiKeys).where(eq(apiKeys.prefix, prefix));
 
 	for (const candidate of candidates) {
 		if (!verifyApiKey(trimmed, candidate.keyHash)) continue;
 		const [user] = await db.select().from(users).where(eq(users.id, candidate.userId)).limit(1);
-		if (!user || user.disabled || user.deletedAt) continue;
+		if (!user || user.disabled) continue;
 
 		const stale = new Date(Date.now() - LAST_USED_WRITE_INTERVAL_MS);
 		await db
@@ -35,7 +35,7 @@ export async function authenticateApiKeyValue(env: CloudflareEnv, key: string): 
 		const allowed = candidate.mailboxScopeEnabled
 			? await db.select({ mailboxId: mcpKeyMailboxes.mailboxId }).from(mcpKeyMailboxes).where(eq(mcpKeyMailboxes.keyId, candidate.id))
 			: null;
-		return { userId: user.id, email: user.email, scopes: scopes.some((scope) => ADMIN_SCOPES.has(scope)) ? scopes.filter((scope) => ADMIN_SCOPES.has(scope)) : scopes, mailboxIds: allowed?.map((row) => row.mailboxId) ?? null, user };
+		return { keyId: candidate.id, keyKind: candidate.kind, userId: user.id, email: user.email, scopes: scopes.some((scope) => ADMIN_SCOPES.has(scope)) ? scopes.filter((scope) => ADMIN_SCOPES.has(scope)) : scopes, mailboxIds: allowed?.map((row) => row.mailboxId) ?? null, user };
 	}
 	return null;
 }

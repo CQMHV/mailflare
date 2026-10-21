@@ -67,8 +67,6 @@ Only one service can own a domain's MX records. When a provider's Setup finds MX
 
 Per-address routes to the Mailflare Worker are only created for domains that receive through Cloudflare, and are recreated when you set Cloudflare up again.
 
-On Workers, domain setup also binds the zone's catch-all to Mailflare by default. Set the `MAILFLARE_CATCH_ALL` Worker variable to `false` (a boolean or the string `"false"`) to skip that binding during domain setup and DNS repair; existing per-address routes still work. This setting does not remove or disable any existing catch-all or forwarding rules. To receive only at configured addresses, separately disable the old catch-all and any forwarding rules in Cloudflare Email Routing before the final receiving cutover.
-
 ## Cleaning up the provider you left
 
 If a provider you are not using still has configuration for the domain, its card shows **Clean up**:
@@ -94,6 +92,5 @@ You cannot clean up the provider that is currently selected.
 | `RESEND_API_KEY` | Resend key used when none is saved in the app |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | SES credentials used when none are saved in the app |
 | `APP_URL` | Public HTTPS address; required for Resend and SES receiving, because the providers call this app |
-| `MAILFLARE_CATCH_ALL` | Set to `false` to skip automatic Worker catch-all binding; unset keeps the default. Existing routing rules must be changed separately. |
 
 Settings saved in the app take precedence over these variables. Keys saved in the app are stored as plain text in the `app_settings` table (as the AI provider key already is), so protect database backups accordingly.
