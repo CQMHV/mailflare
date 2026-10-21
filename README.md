@@ -2,7 +2,7 @@
 
 # Mailflare
 
-This installation removes commercial restrictions and disables automatic catch-all binding (`MAILFLARE_CATCH_ALL=false`).
+This installation removes commercial restrictions and dashboard-triggered upstream updates, and disables automatic catch-all binding (`MAILFLARE_CATCH_ALL=false`).
 
 Mailflare is a self-hosted email inbox for custom domains, built on Cloudflare. Supports **Resend**, or **AWS SES**
 

@@ -139,35 +139,9 @@ The assistant panel no longer exposes MCP key management. External MCP clients c
 
 ## Updating Mailflare
 
-The **Update Mailflare** button in the admin dashboard dispatches `.github/workflows/deploy-update.yml` in the installation repository. The workflow replaces the installation branch's complete tracked tree with the latest upstream source, commits that replacement, and pushes it. This avoids merge conflicts between independently created installation and upstream histories. Target-only committed files and code changes are intentionally removed; repository variables, secrets, and other GitHub or Cloudflare configuration remain unchanged. A connected Cloudflare Git integration then builds and deploys the change.
+Push reviewed updates to the installation repository's `main` branch. Cloudflare Workers Builds automatically builds and deploys that branch. Preserve the installation settings and the differences listed in the README when updating from upstream. Wait for the Cloudflare deployment to finish before using the new release.
 
-### Auto update
-
-Create a fine-grained personal access token for the installation repository with these repository permissions:
-
-| Permission | Access | Used for |
-| --- | --- | --- |
-| Actions | Read and write | Dispatching `deploy-update.yml` from the Mailflare admin dashboard |
-| Contents | Read and write | Committing and pushing the upstream source into the installation repository |
-| Workflows | Read and write | Replacing files inside `.github/workflows` during an update |
-
-Configure the token and repository details in both Cloudflare and GitHub:
-
-| Location | Name | Type | Value |
-| --- | --- | --- | --- |
-| Cloudflare Worker | `GITHUB_UPDATE_TOKEN` | Secret | The fine-grained personal access token |
-| Cloudflare Worker | `GITHUB_UPDATE_REPO` | Variable | The installation repository in `owner/repository` format |
-| Cloudflare Worker | `GITHUB_UPDATE_REF` | Optional variable | The installation branch to update; omit it to use the repository's default branch |
-| GitHub repository → Actions | `MAILFLARE_UPDATE_TOKEN` | Repository secret | The same fine-grained personal access token |
-| GitHub repository → Actions | `UPDATE_SOURCE_REPOSITORY` | Optional repository variable | The upstream repository; defaults to `hieunc229/mailflare` |
-
-The same token can be used for `GITHUB_UPDATE_TOKEN` and `MAILFLARE_UPDATE_TOKEN` when it has all three permissions above. Keep both values secret and limit the token's repository access to the installation repository.
-
-Make sure `.github/workflows/deploy-update.yml` exists on the installation branch. If it is missing, create the file and copy its contents from the [canonical Mailflare update workflow](https://github.com/hieunc229/mailflare/blob/main/.github/workflows/deploy-update.yml). If an older installation has a different updater, replace it with the latest canonical workflow once. A running workflow cannot create or replace itself until the current workflow has been installed manually.
-
-After the GitHub Action completes successfully, wait for the connected Cloudflare deployment to finish before refreshing Mailflare or applying pending database migrations. The workflow updates the repository first; the new application version is not live until Cloudflare completes its deployment.
-
-Deployment and database migration are separate. After Cloudflare deploys a repository push or an admin-triggered update, open or refresh **Admin settings**. The application update card shows any pending database migrations. Select **Update database** to apply them through the Worker's D1 binding. The same runner initializes a new database during setup.
+Deployment and database migration are separate. **Admin settings** shows any pending database migrations. Select **Update database** to apply them through the Worker's D1 binding. The same runner initializes a new database during setup.
 
 If the Cloudflare dashboard has a custom deploy command containing `wrangler d1 migrations apply DB --remote`, remove that part and use `npm run deploy`.
 
