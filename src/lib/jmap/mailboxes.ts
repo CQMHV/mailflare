@@ -33,7 +33,7 @@ async function loadCounts(ctx: JmapContext, mailboxIds: string[]): Promise<Map<s
 			status: messages.status,
 			folderId: messages.folderId,
 			total: count(),
-			unread: sql<number>`sum(case when ${messages.read} = 0 and ${messages.direction} = 'inbound' then 1 else 0 end)`,
+			unread: sql<number>`sum(case when not ${messages.read} and ${messages.direction} = 'inbound' then 1 else 0 end)`,
 		})
 		.from(messages)
 		.where(inArray(messages.mailboxId, mailboxIds))

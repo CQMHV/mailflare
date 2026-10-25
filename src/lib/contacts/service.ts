@@ -44,7 +44,7 @@ export async function upsertContactFromAddress(env: CloudflareEnv, input: Contac
 		displayName,
 		source: input.source,
 		lastSeenAt: now,
-	});
+	}).onConflictDoNothing(); // Two messages from a new sender can be processed at once.
 	const avatarKey = await importGravatarAvatar(env, input.userId, email);
 	if (avatarKey) {
 		await db.update(contacts).set({ avatarKey }).where(eq(contacts.id, id));
@@ -122,7 +122,7 @@ export async function blockContact(env: CloudflareEnv, input: BlockContactInput)
 			source: "inbound",
 			blocked: true,
 			lastSeenAt: new Date(),
-		});
+		}).onConflictDoUpdate({ target: contacts.id, set: { blocked: true } });
 		const avatarKey = await importGravatarAvatar(env, input.userId, email);
 		if (avatarKey) {
 			await db.update(contacts).set({ avatarKey }).where(eq(contacts.id, contactId));

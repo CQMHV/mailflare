@@ -60,6 +60,8 @@ across deployments so existing browser subscriptions remain valid.
 
 Setup applies the committed migrations through the Worker's D1 binding before creating the first admin account.
 
+To store data in PostgreSQL, MySQL, Turso/libSQL or another database instead of D1, set `DATABASE_URL` (and `DATABASE_DRIVER` when it cannot be inferred) as a Worker variable or secret before running setup. The same setup and **Update database** flow then applies that database's migrations. See [Databases](databases.md).
+
 ## Step 4: Connect your primary domain and create an account
 
 1. Enter a domain that already uses Cloudflare DNS on the same account as your `CF_TOKEN`.

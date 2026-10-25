@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
+import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
 
 /**
  * Recipients arrive either as one comma-separated header string (the composer)
@@ -31,6 +32,8 @@ export const sendEmailSchema = z.object({
 	mailboxId: z.string().min(1).max(200),
 	scheduledAt: z.string().datetime().optional(),
 	undoSend: z.boolean().optional(),
+	trackOpens: z.boolean().optional(),
+	followUpDays: z.number().int().min(1).max(MAX_FOLLOW_UP_DAYS).optional(),
 	attachments: z
 		.array(
 			z.object({

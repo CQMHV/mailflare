@@ -29,6 +29,8 @@ export async function importMessagesToMailbox(
 				destination: input.destination,
 				filename: message.filename,
 				raw: message.raw,
+				read: message.read,
+				starred: message.starred,
 			});
 			if (imported) {
 				result.imported += 1;
@@ -37,7 +39,7 @@ export async function importMessagesToMailbox(
 			}
 		} catch (error) {
 			result.skipped += 1;
-			result.errors.push(`${message.filename}: ${error instanceof Error ? error.message : "Import failed"}`);
+			result.errors.push(`${message.filename}: ${describeImportError(error)}`);
 		}
 	}
 	return result;
@@ -51,6 +53,8 @@ async function importMessageToMailbox(
 		destination: ImportDestination;
 		filename: string;
 		raw: ArrayBuffer;
+		read?: boolean;
+		starred?: boolean;
 	},
 ): Promise<boolean> {
 	const parsed = await parseRawMime(input.raw);
@@ -58,11 +62,19 @@ async function importMessageToMailbox(
 	const providerMessageId = parsed.messageId ?? `import:${input.filename}:${input.raw.byteLength}`;
 
 	const [existing] = await db
-		.select({ id: messages.id })
+		.select({ id: messages.id, read: messages.read, starred: messages.starred })
 		.from(messages)
 		.where(and(eq(messages.mailboxId, input.mailboxId), eq(messages.providerMessageId, providerMessageId)))
 		.limit(1);
-	if (existing) return false;
+	if (existing) {
+		// Re-imports only add read/starred state, so local changes are never undone.
+		const read = existing.read || input.read === true;
+		const starred = existing.starred || input.starred === true;
+		if (read !== existing.read || starred !== existing.starred) {
+			await db.update(messages).set({ read, starred }).where(eq(messages.id, existing.id));
+		}
+		return false;
+	}
 
 	const messageId = newId("msg");
 	const rawR2Key = `imports/${messageId}.eml`;
@@ -88,7 +100,8 @@ async function importMessageToMailbox(
 		htmlBody: parsed.html,
 		rawR2Key,
 		status: placement.status,
-		read: placement.direction === "outbound",
+		read: input.read ?? placement.direction === "outbound",
+		starred: input.starred ?? false,
 		threadId: await resolveThreadId(db, {
 			mailboxId: input.mailboxId,
 			messageId: parsed.messageId,
@@ -105,16 +118,26 @@ async function importMessageToMailbox(
 			httpMetadata: { contentType: "message/rfc822" },
 		});
 		await storeMessageAttachments(env, messageId, parsed.attachments, { validate: false });
-		const contactAddress = placement.direction === "outbound" ? toAddr : fromAddr;
-		await upsertContactFromAddress(env, {
-			userId: input.userId,
-			address: contactAddress,
-			source: placement.direction === "outbound" ? "outbound" : "inbound",
-		});
 	} catch (error) {
 		await deleteMessageWithObjects(env, db, messageId, rawR2Key);
 		throw error;
 	}
 
+	// The contact is a by-product: the message is already stored, so a failed update must not discard it.
+	await upsertContactFromAddress(env, {
+		userId: input.userId,
+		address: placement.direction === "outbound" ? toAddr : fromAddr,
+		source: placement.direction === "outbound" ? "outbound" : "inbound",
+	}).catch((error) => console.error("Import contact update failed", input.filename, describeImportError(error)));
+
 	return true;
+}
+
+/**
+ * Drizzle wraps driver errors as "Failed query: <sql> params: <values>", which
+ * hides the reason and repeats message data; the driver's own message is on `cause`.
+ */
+export function describeImportError(error: unknown): string {
+	if (!(error instanceof Error)) return "Import failed";
+	return error.cause instanceof Error && error.message.startsWith("Failed query") ? error.cause.message : error.message;
 }

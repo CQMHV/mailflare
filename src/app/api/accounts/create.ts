@@ -1,4 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
+import { isUniqueConstraintError } from "@/lib/database-errors";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { domains, mailboxAliases, mailboxes, users } from "@/db/schema";
@@ -79,8 +80,7 @@ export async function createAccountResponse(env: CloudflareEnv, adminUserId: str
 		if (cleanup.some((result) => result.status === "rejected")) {
 			return NextResponse.json({ error: "Account creation failed and cleanup could not finish. Check the account and Cloudflare routing before retrying." }, { status: 502 });
 		}
-		const cause = error instanceof Error ? error.cause : null;
-		if (/UNIQUE constraint failed/i.test(`${error} ${cause}`)) {
+		if (isUniqueConstraintError(error)) {
 			return NextResponse.json({ error: "An email address is already assigned" }, { status: 409 });
 		}
 		return NextResponse.json({ error: "Failed to create account mailbox routing. Please try again." }, { status: 502 });
