@@ -197,6 +197,8 @@ export default function SettingsImportPage() {
         </p>
       </div> */}
 
+      <ImportJobs refreshKey={jobsRefresh} />
+
       <section className="space-y-4">
         <div>
           <h2 className="text-xl font-semibold text-neutral-900">
@@ -492,7 +494,6 @@ export default function SettingsImportPage() {
           </CardContent>
         </div>
       </section>
-      <ImportJobs refreshKey={jobsRefresh} />
     </div>
   );
 }

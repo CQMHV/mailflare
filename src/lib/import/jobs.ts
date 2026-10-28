@@ -4,6 +4,7 @@ import { importJobs, mailboxes } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { getImportMessageUserId, parseImportDestination } from "./destination";
 import { fetchImapMessages } from "./imap";
+import { getImapChunkSize, growImapChunkSize, isPermanentImapError } from "./imap-utils";
 import { deleteStagedImport, importBatchKey, stageImportMessages, unpackImportMessages } from "./staging";
 import { importMessagesToMailbox } from "./service";
 import type {
@@ -21,6 +22,8 @@ const ACTIVE = ["queued", "running"] as const;
 const MAX_STORED_ERRORS = 20;
 /** IMAP messages fetched per queue message; the connection is reopened for each. */
 const IMAP_CHUNK_SIZE = 50;
+/** Consecutive failed IMAP chunks, each retried smaller, before the job gives up. */
+const MAX_IMAP_FAILURES = 4;
 const STALE_AFTER_MS = 30 * 60 * 1000;
 const KEEP_FINISHED_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -178,7 +181,8 @@ export async function cancelOrDismissImportJob(env: CloudflareEnv, userId: strin
 }
 
 /** Runs one chunk of a job and queues the next. Never throws for import failures; they land on the job. */
-export async function processImportJob(env: CloudflareEnv, message: ImportJobMessage): Promise<void> {
+export async function processImportJob(env: CloudflareEnv, delivered: ImportJobMessage): Promise<void> {
+	const { attempt, ...message } = delivered;
 	const db = getDb(env);
 	const [job] = await db.select().from(importJobs).where(eq(importJobs.id, message.jobId)).limit(1);
 	if (!job || (job.status !== "queued" && job.status !== "running")) return;
@@ -192,14 +196,16 @@ export async function processImportJob(env: CloudflareEnv, message: ImportJobMes
 
 	let chunk: Chunk;
 	try {
-		chunk = job.kind === "file" ? await runFileChunk(env, job) : await runImapChunk(env, job, message.imapPassword);
+		chunk = job.kind === "file" ? await runFileChunk(env, job) : await runImapChunk(env, job, message.imapPassword, attempt);
 	} catch (error) {
+		const reason = error instanceof Error ? error.message : "Import failed";
+		if (job.kind === "imap" && (await retryImapChunkSmaller(env, job, message, reason))) return;
 		const now = new Date();
 		await db
 			.update(importJobs)
 			.set({
 				status: "failed",
-				error: error instanceof Error ? error.message : "Import failed",
+				error: reason,
 				finishedAt: now,
 				updatedAt: now,
 			})
@@ -232,6 +238,33 @@ export async function processImportJob(env: CloudflareEnv, message: ImportJobMes
 	if (!chunk.done) await enqueue(env, message);
 }
 
+/** Records the failure, halves the chunk size and queues the same chunk again. False when the job should fail instead. */
+async function retryImapChunkSmaller(
+	env: CloudflareEnv,
+	job: JobRow,
+	message: ImportJobMessage,
+	reason: string,
+): Promise<boolean> {
+	if (isPermanentImapError(reason)) return false;
+	const cursor = parseJson<ImapImportCursor>(job.cursor, { source: 0, done: 0, counted: false });
+	const failures = (cursor.failures ?? 0) + 1;
+	if (failures >= MAX_IMAP_FAILURES) return false;
+	const spec = parseJson<ImapImportSpec | null>(job.spec, null);
+	const base = spec ? imapBaseChunkSize(spec, cursor) : IMAP_CHUNK_SIZE;
+	const next: ImapImportCursor = { ...cursor, failures, size: Math.max(1, Math.floor(getImapChunkSize(base, cursor.size) / 2)) };
+	const recorded = await getDb(env)
+		.update(importJobs)
+		.set({ cursor: JSON.stringify(next), updatedAt: new Date() })
+		.where(and(eq(importJobs.id, job.id), inArray(importJobs.status, [...ACTIVE])))
+		.returning({ id: importJobs.id });
+	if (recorded.length) await enqueue(env, message);
+	return true;
+}
+
+function imapBaseChunkSize(spec: ImapImportSpec, cursor: ImapImportCursor): number {
+	return Math.min(IMAP_CHUNK_SIZE, spec.importAll ? spec.limit : spec.limit - cursor.done);
+}
+
 async function getImportUserId(env: CloudflareEnv, job: JobRow, destinationValue: string): Promise<string> {
 	const [mailbox] = await getDb(env)
 		.select({ userId: mailboxes.userId })
@@ -259,7 +292,12 @@ async function runFileChunk(env: CloudflareEnv, job: JobRow): Promise<Chunk> {
 	return { result, cursor: { batch: next }, totalDelta: 0, done: next >= spec.batches, consumedKey: key };
 }
 
-async function runImapChunk(env: CloudflareEnv, job: JobRow, password: string | undefined): Promise<Chunk> {
+async function runImapChunk(
+	env: CloudflareEnv,
+	job: JobRow,
+	password: string | undefined,
+	attempt?: number,
+): Promise<Chunk> {
 	if (!password) throw new Error("IMAP credentials were lost; start the import again");
 	const spec = parseJson<ImapImportSpec | null>(job.spec, null);
 	if (!spec) throw new Error("Import settings are unreadable");
@@ -268,7 +306,8 @@ async function runImapChunk(env: CloudflareEnv, job: JobRow, password: string | 
 	const empty: ImportMailboxResult = { imported: 0, skipped: 0, errors: [] };
 	if (!source) return { result: empty, cursor, totalDelta: 0, done: true };
 
-	const batchSize = Math.min(IMAP_CHUNK_SIZE, spec.importAll ? spec.limit : spec.limit - cursor.done);
+	const base = imapBaseChunkSize(spec, cursor);
+	const batchSize = base > 0 ? getImapChunkSize(base, cursor.size, attempt) : 0;
 	const fetched =
 		batchSize > 0
 			? await fetchImapMessages({
@@ -293,15 +332,16 @@ async function runImapChunk(env: CloudflareEnv, job: JobRow, password: string | 
 		: empty;
 
 	const done = cursor.done + fetched.messages.length;
+	const grown = batchSize > 0 ? growImapChunkSize(IMAP_CHUNK_SIZE, batchSize) : undefined;
 	const totalDelta = cursor.counted ? 0 : spec.importAll ? fetched.total : Math.min(spec.limit, fetched.total);
 	const sourceFinished = fetched.nextOffset === null || fetched.messages.length === 0 || (!spec.importAll && done >= spec.limit);
 	if (!sourceFinished) {
-		return { result, cursor: { source: cursor.source, done, counted: true }, totalDelta, done: false };
+		return { result, cursor: { source: cursor.source, done, counted: true, size: grown }, totalDelta, done: false };
 	}
 	const nextSource = cursor.source + 1;
 	return {
 		result,
-		cursor: { source: nextSource, done: 0, counted: false },
+		cursor: { source: nextSource, done: 0, counted: false, size: grown },
 		totalDelta,
 		done: nextSource >= spec.sources.length,
 	};

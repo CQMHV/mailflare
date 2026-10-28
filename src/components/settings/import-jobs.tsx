@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import type { ImportJobSummary } from "@/lib/import/jobs-types";
@@ -63,10 +64,12 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 
 	return (
 		<section className="space-y-4" aria-live="polite">
-			<div>
-				<h2 className="text-xl font-semibold text-neutral-900">{t("importJobs.title")}</h2>
-				<p className="mt-1 text-sm text-neutral-500">{t("importJobs.description")}</p>
-			</div>
+			{hasActive && (
+				<p className="flex items-center gap-2 text-sm text-neutral-600">
+					<Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+					{t("importJobs.running")}
+				</p>
+			)}
 			<ul className="space-y-3">
 				{jobs.map((job) => {
 					const percent = getImportJobPercent(job);
@@ -111,12 +114,19 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 								</div>
 							)}
 							<p className="text-xs text-neutral-500">
-								{t("importJobs.counts", {
-									processed: job.processed,
-									total: job.total,
-									imported: job.imported,
-									skipped: job.skipped,
-								})}
+								{active && job.total <= 0 ? (
+									<span className="inline-flex items-center gap-1.5">
+										<Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+										{t("importJobs.counting")}
+									</span>
+								) : (
+									t("importJobs.counts", {
+										processed: job.processed,
+										total: job.total,
+										imported: job.imported,
+										skipped: job.skipped,
+									})
+								)}
 							</p>
 							{job.error && (
 								<p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{job.error}</p>

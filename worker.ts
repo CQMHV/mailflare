@@ -115,7 +115,7 @@ export default {
 				} else if (isWebhookRetryMessage(msg.body)) {
 					await processWebhookRetry(env, msg.body as WebhookRetryMessage);
 				} else if (isImportJobMessage(msg.body)) {
-					await processImportJob(env, msg.body);
+					await processImportJob(env, { ...msg.body, attempt: msg.attempts });
 				} else if (typeof msg.body === "object" && msg.body !== null && (msg.body as { kind?: unknown }).kind === "email.scheduled") {
 					await processOutboundQueue(env, msg.body as OutboundQueueMessage);
 				} else {
