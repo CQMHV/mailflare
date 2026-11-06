@@ -484,6 +484,48 @@
       "when": 1792855200000,
       "tag": "0077_add_import_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "6",
+      "when": 1792858800000,
+      "tag": "0078_add_calendar_reminders",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "6",
+      "when": 1793260800000,
+      "tag": "0079_remote_content_ask",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "6",
+      "when": 1793280375889,
+      "tag": "0080_passkeys_and_step_up_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "6",
+      "when": 1793280376889,
+      "tag": "0081_add_feature_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "6",
+      "when": 1793280377889,
+      "tag": "0082_add_api_key_sha256",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "6",
+      "when": 1793280378889,
+      "tag": "0083_add_message_has_unsubscribe",
+      "breakpoints": true
     }
   ]
 }

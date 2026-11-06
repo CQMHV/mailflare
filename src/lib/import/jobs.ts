@@ -4,7 +4,7 @@ import { importJobs, mailboxes } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { getImportMessageUserId, parseImportDestination } from "./destination";
 import { fetchImapMessages } from "./imap";
-import { getImapChunkSize, growImapChunkSize, isPermanentImapError } from "./imap-utils";
+import { getImapChunkSize, growImapChunkSize, isMissingImapFolderError, isPermanentImapError } from "./imap-utils";
 import { deleteStagedImport, importBatchKey, stageImportMessages, unpackImportMessages } from "./staging";
 import { importMessagesToMailbox } from "./service";
 import type {
@@ -176,8 +176,55 @@ export async function cancelOrDismissImportJob(env: CloudflareEnv, userId: strin
 		await cleanupJob(env, row);
 	} else {
 		await db.delete(importJobs).where(eq(importJobs.id, jobId));
+		await cleanupJob(env, row);
 	}
 	return true;
+}
+
+export type ResumeImportResult =
+	| { ok: true; job: ImportJobSummary }
+	| { ok: false; status: 400 | 404 | 409; error: string };
+
+/**
+ * Continues a failed job from its saved cursor. IMAP passwords are never stored, so the caller supplies
+ * it again; file jobs continue from their staged batches when those still exist.
+ */
+export async function resumeImportJob(
+	env: CloudflareEnv,
+	userId: string,
+	jobId: string,
+	password?: string,
+): Promise<ResumeImportResult> {
+	const db = getDb(env);
+	const [row] = await db
+		.select()
+		.from(importJobs)
+		.where(and(eq(importJobs.id, jobId), eq(importJobs.userId, userId)))
+		.limit(1);
+	if (!row) return { ok: false, status: 404, error: "Import not found" };
+	if (row.status !== "failed") return { ok: false, status: 409, error: "Only a failed import can be resumed" };
+
+	let cursor = row.cursor;
+	if (row.kind === "imap") {
+		if (!password) return { ok: false, status: 400, error: "Enter the IMAP password to resume" };
+		const parsed = parseJson<ImapImportCursor>(row.cursor, { source: 0, done: 0, counted: false });
+		cursor = JSON.stringify({ ...parsed, failures: undefined });
+	} else {
+		const parsed = parseJson<FileImportCursor>(row.cursor, { batch: 0 });
+		if (!(await env.BUCKET.head(importBatchKey(row.id, parsed.batch)))) {
+			return { ok: false, status: 409, error: "Uploaded files are no longer available; upload them again" };
+		}
+	}
+
+	const now = new Date();
+	const [claimed] = await db
+		.update(importJobs)
+		.set({ status: "queued", error: null, finishedAt: null, cursor, updatedAt: now })
+		.where(and(eq(importJobs.id, row.id), eq(importJobs.status, "failed")))
+		.returning();
+	if (!claimed) return { ok: false, status: 409, error: "Only a failed import can be resumed" };
+	await enqueue(env, { kind: "import.run", jobId: row.id, ...(row.kind === "imap" ? { imapPassword: password } : {}) });
+	return { ok: true, job: toImportJobSummary(claimed) };
 }
 
 /** Runs one chunk of a job and queues the next. Never throws for import failures; they land on the job. */
@@ -210,7 +257,7 @@ export async function processImportJob(env: CloudflareEnv, delivered: ImportJobM
 				updatedAt: now,
 			})
 			.where(and(eq(importJobs.id, job.id), inArray(importJobs.status, [...ACTIVE])));
-		await cleanupJob(env, job);
+		// Staged uploads stay so the job can be resumed; dismissing or pruning it deletes them.
 		return;
 	}
 
@@ -308,19 +355,32 @@ async function runImapChunk(
 
 	const base = imapBaseChunkSize(spec, cursor);
 	const batchSize = base > 0 ? getImapChunkSize(base, cursor.size, attempt) : 0;
-	const fetched =
-		batchSize > 0
-			? await fetchImapMessages({
-					host: spec.host,
-					port: spec.port,
-					secure: spec.secure,
-					username: spec.username,
-					password,
-					folder: source.folder,
-					limit: batchSize,
-					offset: cursor.done,
-				})
-			: { messages: [], total: 0, nextOffset: null };
+	let fetched: Awaited<ReturnType<typeof fetchImapMessages>> = { messages: [], total: 0, nextOffset: null };
+	if (batchSize > 0) {
+		try {
+			fetched = await fetchImapMessages({
+				host: spec.host,
+				port: spec.port,
+				secure: spec.secure,
+				username: spec.username,
+				password,
+				folder: source.folder,
+				limit: batchSize,
+				offset: cursor.done,
+			});
+		} catch (error) {
+			const reason = error instanceof Error ? error.message : "";
+			if (!isMissingImapFolderError(reason)) throw error;
+			// A folder that cannot be opened (Gmail's `[Gmail]` parent) must not sink the whole import.
+			const nextSource = cursor.source + 1;
+			return {
+				result: { imported: 0, skipped: 0, errors: [`${source.folder}: ${reason}`] },
+				cursor: { source: nextSource, done: 0, counted: false },
+				totalDelta: 0,
+				done: nextSource >= spec.sources.length,
+			};
+		}
+	}
 
 	const result = fetched.messages.length
 		? await importMessagesToMailbox(env, {
@@ -359,14 +419,12 @@ export async function sweepImportJobs(env: CloudflareEnv, now = new Date()): Pro
 			.update(importJobs)
 			.set({ status: "failed", error: "Import was interrupted", finishedAt: now, updatedAt: now })
 			.where(and(eq(importJobs.id, row.id), inArray(importJobs.status, [...ACTIVE])));
-		await cleanupJob(env, row);
 	}
-	await db
-		.delete(importJobs)
-		.where(
-			and(
-				inArray(importJobs.status, ["completed", "failed", "cancelled"]),
-				lt(importJobs.finishedAt, new Date(now.getTime() - KEEP_FINISHED_MS)),
-			),
-		);
+	const expired = and(
+		inArray(importJobs.status, ["completed", "failed", "cancelled"]),
+		lt(importJobs.finishedAt, new Date(now.getTime() - KEEP_FINISHED_MS)),
+	);
+	const old = await db.select().from(importJobs).where(expired);
+	for (const row of old) await cleanupJob(env, row);
+	await db.delete(importJobs).where(expired);
 }

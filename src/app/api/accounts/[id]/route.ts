@@ -6,8 +6,12 @@ import { updateManagedAccountSchema } from "@/lib/validators";
 import { requireAccountAdmin } from "../utils";
 import { canManageUserAccount, canManageUsers, isPrimaryAdmin } from "@/lib/auth/admin";
 import type { AccountRouteParams } from "./types";
-import { selectAccountById, updateAccountCredentials } from "./utils";
-import { deleteUserSessions } from "@/lib/auth/session";
+import { AccountSecurityChangedError, PasskeyOnlyPasswordError, selectAccountById, updateAccountCredentials } from "./utils";
+import { deleteUserSessions, getSessionTokenFromRequestHeaders } from "@/lib/auth/session";
+import { hasPasswordHash } from "@/lib/auth/password";
+import { consumeStepUpGrant } from "@/lib/auth/webauthn/grants";
+import { createAuditLog } from "@/lib/mailboxes/audit";
+import { authError } from "@/lib/http/auth-error";
 
 export async function GET(request: Request, { params }: AccountRouteParams) {
 	const access = await requireAccountAdmin(request);
@@ -29,8 +33,11 @@ export async function GET(request: Request, { params }: AccountRouteParams) {
 			canManageMailboxes: account.canManageMailboxes,
 			canManageDomains: account.canManageDomains,
 			canManageUsers: account.canManageUsers,
+			calendarEnabled: account.calendarEnabled,
+			driveEnabled: account.driveEnabled,
 			forwardingEmail: account.forwardingEmail,
 			hasAvatar: !!account.avatarKey,
+			passwordSet: hasPasswordHash(account.passwordHash),
 			editable: canManageUserAccount(actor, account),
 			canChangeRole: isPrimaryAdmin(actor),
 			canTransferPrimary: isPrimaryAdmin(actor) && !account.isPrimaryAdmin && !account.disabled,
@@ -64,9 +71,44 @@ export async function PATCH(request: Request, { params }: AccountRouteParams) {
 	if (!actorIsPrimary && parsed.data.role !== account.role) {
 		return NextResponse.json({ error: "Only the primary admin can change roles" }, { status: 403 });
 	}
-	await updateAccountCredentials(db, id, { name: parsed.data.name, password: parsed.data.password ?? null });
+	// A passkey-only account must be recovered through a passkey enrolment link,
+	// not by silently giving it a password that bypasses its recovery policy.
+	if (parsed.data.password && !hasPasswordHash(account.passwordHash)) {
+		return authError("passkey_only_password", 409);
+	}
+	if (parsed.data.password) {
+		const sessionToken = getSessionTokenFromRequestHeaders(request);
+		if (!parsed.data.stepUpToken || !sessionToken || !(await consumeStepUpGrant(access.env, {
+			token: parsed.data.stepUpToken,
+			userId: actor.id,
+			sessionToken,
+			action: "admin.password_reset",
+			targetUserId: id,
+		}))) {
+			return authError("verification_required", 401);
+		}
+	}
+	try {
+		await updateAccountCredentials(db, id, { name: parsed.data.name, password: parsed.data.password ?? null });
+	} catch (error) {
+		if (error instanceof PasskeyOnlyPasswordError) {
+			return authError("passkey_only_password", 409);
+		}
+		if (error instanceof AccountSecurityChangedError) {
+			return authError("action_conflict", 409);
+		}
+		throw error;
+	}
 	// A password set by an admin is a reset: whoever held the old one is signed out.
-	if (parsed.data.password) await deleteUserSessions(access.env, id);
+	if (parsed.data.password) {
+		await deleteUserSessions(access.env, id);
+		await createAuditLog(access.env, {
+			actorUserId: actor.id,
+			targetUserId: id,
+			action: "auth.admin_password_reset",
+			metadata: { ipAddress: request.headers.get("cf-connecting-ip") ?? "unknown" },
+		});
+	}
 	// The primary admin always stays an enabled admin; only a transfer can move the role.
 	const role = account.isPrimaryAdmin ? "admin" : actorIsPrimary ? parsed.data.role : account.role;
 	const disabled = account.isPrimaryAdmin ? false : parsed.data.disabled;
@@ -76,6 +118,8 @@ export async function PATCH(request: Request, { params }: AccountRouteParams) {
 		canManageMailboxes: parsed.data.canManageMailboxes,
 		...(actorIsPrimary && parsed.data.canManageDomains !== undefined ? { canManageDomains: parsed.data.canManageDomains } : {}),
 		...(actorIsPrimary && parsed.data.canManageUsers !== undefined ? { canManageUsers: parsed.data.canManageUsers } : {}),
+		...(parsed.data.calendarEnabled !== undefined ? { calendarEnabled: parsed.data.calendarEnabled } : {}),
+		...(parsed.data.driveEnabled !== undefined ? { driveEnabled: parsed.data.driveEnabled } : {}),
 		...(parsed.data.forwardingEmail !== undefined ? { forwardingEmail: parsed.data.forwardingEmail } : {}),
 	}).where(eq(users.id, id));
 	return NextResponse.json({ ok: true });

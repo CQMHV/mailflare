@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth/cookies";
 import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 import { parseBookingEventInput } from "@/lib/booking/utils";
 import { getEnv } from "@/lib/cloudflare";
+import { calendarAccessError } from "@/lib/calendar/api-auth";
 import type { BookingEventRouteContext } from "./types";
 import { validBookingHostIds } from "@/lib/booking/hosts";
 
@@ -14,6 +15,8 @@ export async function PATCH(request: Request, { params }: BookingEventRouteConte
 	const env = getEnv();
 	const user = await getCurrentUser(env, request);
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+	const denied = calendarAccessError(user);
+	if (denied) return denied;
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const input = parseBookingEventInput(await request.json().catch(() => null));
 	if (!input) return NextResponse.json({ error: "Enter valid booking details and availability." }, { status: 400 });
@@ -37,6 +40,8 @@ export async function DELETE(request: Request, { params }: BookingEventRouteCont
 	const env = getEnv();
 	const user = await getCurrentUser(env, request);
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+	const denied = calendarAccessError(user);
+	if (denied) return denied;
 	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const { eventId } = await params;
 	const [event] = await getDb(env).delete(bookingEvents).where(and(eq(bookingEvents.id, eventId), eq(bookingEvents.userId, user.id))).returning();

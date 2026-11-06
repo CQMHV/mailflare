@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { ImportJobSummary } from "@/lib/import/jobs-types";
-import { fetchImportJobs, removeImportJob } from "@/app/(settings)/settings/import/utils";
+import { fetchImportJobs, removeImportJob, resumeImportJob } from "@/app/(settings)/settings/import/utils";
 import { getImportJobPercent, IMPORT_JOBS_POLL_MS, isImportJobActive } from "./import-jobs-utils";
 
 const STATUS_STYLE: Record<ImportJobSummary["status"], string> = {
@@ -21,6 +22,9 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 	const { t } = useLanguage();
 	const [jobs, setJobs] = useState<ImportJobSummary[]>([]);
 	const [loaded, setLoaded] = useState(false);
+	const [resuming, setResuming] = useState<string | null>(null);
+	const [password, setPassword] = useState("");
+	const [resumeError, setResumeError] = useState<string | null>(null);
 	const previous = useRef<Map<string, ImportJobSummary["status"]>>(new Map());
 
 	const load = useCallback(async () => {
@@ -60,6 +64,25 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 		}
 	}
 
+	async function onResume(job: ImportJobSummary) {
+		if (job.kind === "imap" && resuming !== job.id) {
+			setResuming(job.id);
+			setPassword("");
+			setResumeError(null);
+			return;
+		}
+		try {
+			await resumeImportJob(job.id, job.kind === "imap" ? password : undefined);
+			setResuming(null);
+			setPassword("");
+			setResumeError(null);
+		} catch (error) {
+			setResumeError(error instanceof Error ? error.message : t("importJobs.resumeFailed"));
+		} finally {
+			await load();
+		}
+	}
+
 	if (loaded && jobs.length === 0) return null;
 
 	return (
@@ -88,6 +111,11 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 									<span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[job.status]}`}>
 										{t(`importJobs.status.${job.status}`)}
 									</span>
+									{job.status === "failed" && (
+										<Button type="button" size="sm" onClick={() => void onResume(job)}>
+											{t("importJobs.resume")}
+										</Button>
+									)}
 									<Button type="button" variant="outline" size="sm" onClick={() => void onRemove(job)}>
 										{active ? t("importJobs.cancel") : t("importJobs.dismiss")}
 									</Button>
@@ -128,6 +156,28 @@ export function ImportJobs({ refreshKey }: { refreshKey: number }) {
 									})
 								)}
 							</p>
+							{resuming === job.id && job.status === "failed" && (
+								<form
+									className="flex items-center gap-2"
+									onSubmit={(event) => {
+										event.preventDefault();
+										void onResume(job);
+									}}
+								>
+									<Input
+										type="password"
+										autoComplete="off"
+										value={password}
+										onChange={(event) => setPassword(event.target.value)}
+										placeholder={t("importJobs.resumePassword")}
+										aria-label={t("importJobs.resumePassword")}
+									/>
+									<Button type="submit" size="sm" disabled={!password}>
+										{t("importJobs.resume")}
+									</Button>
+								</form>
+							)}
+							{resuming === job.id && resumeError && <p className="text-xs text-red-700">{resumeError}</p>}
 							{job.error && (
 								<p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{job.error}</p>
 							)}

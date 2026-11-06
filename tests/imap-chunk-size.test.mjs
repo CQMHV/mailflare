@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getImapChunkSize, planImapFetchGroups, growImapChunkSize, isPermanentImapError } from "../src/lib/import/imap-utils.ts";
+import { getImapChunkSize, planImapFetchGroups, growImapChunkSize, isPermanentImapError, isMissingImapFolderError } from "../src/lib/import/imap-utils.ts";
 
 test("chunk size defaults to the base and never exceeds it", () => {
 	assert.equal(getImapChunkSize(50, undefined), 50);
@@ -34,4 +34,9 @@ test("fetch groups pipeline small mail, split big mail and drop the tail past th
 	const big = new Map([["5", 8 * mb], ["4", 2 * mb], ["3", 8 * mb], ["2", 8 * mb], ["1", 8 * mb]]);
 	assert.deepEqual(planImapFetchGroups(uids, big).flat(), ["5", "4", "3", "2"]);
 	assert.deepEqual(planImapFetchGroups(["2", "1"], new Map([["1", 5]])), [["2"]]);
+});
+
+test("a folder the server cannot open is detected so the import can skip it", () => {
+	assert.equal(isMissingImapFolderError("IMAP command failed: A0002 NO [NONEXISTENT] Unknown Mailbox: [Gmail] (Failure)"), true);
+	assert.equal(isMissingImapFolderError("IMAP connection closed unexpectedly"), false);
 });

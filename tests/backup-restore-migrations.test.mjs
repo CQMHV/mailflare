@@ -25,7 +25,7 @@ const migrations = readdirSync(directory).filter((name) => name.endsWith(".sql")
 	number: Number.parseInt(name, 10),
 	sql: readFileSync(join(directory, name), "utf8"),
 }));
-const addedTables = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "user_compose_preferences"];
+const addedTables = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "user_compose_preferences", "passkey_credentials"];
 
 function database(context, through = Infinity) {
 	const db = new SqliteDatabase();
@@ -70,7 +70,11 @@ for (const version of [1, 2]) {
 		document.includedTables = document.includedTables.filter((table) => !absent.includes(table));
 		const restored = database(context);
 		await restoreDatabaseRecords(restored, encode(document));
-		for (const table of ["users", "domains", "mailboxes", "messages"]) assert.deepEqual(records(restored, table), records(old, table));
+		assert.deepEqual(records(restored, "users"), records(old, "users").map((user) => ({
+			...user, require_second_factor: 0, passkey_count: 0, security_version: 0, calendar_enabled: 1, drive_enabled: 1,
+		})));
+		for (const table of ["domains", "mailboxes"]) assert.deepEqual(records(restored, table), records(old, table));
+		assert.deepEqual(records(restored, "messages"), records(old, "messages").map((message) => ({ ...message, has_unsubscribe: 0 })));
 		for (const table of addedTables) assert.deepEqual(records(restored, table), []);
 		assert.deepEqual(restored.db.prepare("PRAGMA foreign_key_check").all(), []);
 	});
@@ -85,6 +89,9 @@ test("new persisted records round-trip in foreign-key order while import jobs re
 		INSERT INTO message_opens (id, token, opened_at, automated) VALUES ('open', 'token', 2, 0);
 		INSERT INTO follow_ups (id, message_id, user_id, due_at, created_at) VALUES ('follow-up', 'message', 'user', 3, 1);
 		INSERT INTO user_compose_preferences (user_id, track_opens_default, undo_send_seconds, updated_at) VALUES ('user', 1, 45, 1);
+		INSERT INTO passkey_credentials (id, user_id, credential_id, credential_hash, public_key, counter, device_type, backed_up, name, created_at)
+		VALUES ('passkey', 'user', 'credential', 'credential-hash', 'public-key', 0, 'singleDevice', 0, 'Passkey', 1);
+		UPDATE users SET password_hash = '!passkey-only' WHERE id = 'user';
 		INSERT INTO import_jobs (id, user_id, mailbox_id, kind, label, spec, created_at, updated_at)
 		VALUES ('job', 'user', 'mailbox', 'imap', 'Import', '{}', 1, 1);
 	`);

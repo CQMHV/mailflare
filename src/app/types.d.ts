@@ -1,15 +1,16 @@
 import type { TranslationKey } from "@/lib/i18n/types";
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "@/components/icons";
 import type { ButtonProps } from "@/components/ui/button";
 import type { MailboxSelectorUser } from "@/components/mailbox-selector-types";
 import type { ReactNode } from "react";
 
 export type HomeAuthProviderProps = {
 	children: ReactNode;
-};
-
-export type HomeAuthResponse = {
-	user?: MailboxSelectorUser;
+	/**
+	 * The account resolved from the session cookie on the server. `undefined`
+	 * means the server did not answer, so the provider must check itself.
+	 */
+	initialUser?: MailboxSelectorUser | null;
 };
 
 export type HomeAccountMenuProps = {

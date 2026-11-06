@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
-import { domains, mailboxAccess, mailboxes } from "@/db/schema";
+import { domains, mailboxAccess, mailboxes, users } from "@/db/schema";
+import { getAccountStatus } from "@/lib/accounts/deletion-utils";
 import type { SessionUser } from "@/lib/auth/types";
 import type { MailboxAccessLevel, MailboxPermission } from "./types";
 
@@ -55,16 +56,22 @@ export async function listAccessibleMailboxes(db: AppDatabase, user: Pick<Sessio
 			disabled: mailboxes.disabled,
 			createdAt: mailboxes.createdAt,
 			hostname: domains.hostname,
+			ownerLastSignInAt: users.lastSignInAt,
+			ownerDisabled: users.disabled,
+			ownerDeletedAt: users.deletedAt,
 		})
 		.from(mailboxes)
 		.innerJoin(domains, eq(mailboxes.domainId, domains.id))
+		.leftJoin(users, eq(mailboxes.userId, users.id))
 		.where(and(eq(mailboxes.userId, user.id), eq(mailboxes.disabled, false)));
 	const owned = ownedRows
 		.map((row) => {
-			const { avatarKey, ...mailbox } = row;
+			const { avatarKey, ownerLastSignInAt, ownerDisabled, ownerDeletedAt, ...mailbox } = row;
 			return {
 				...mailbox,
 				hasAvatar: !!avatarKey,
+				status: row.type === "shared" ? "active" as const : getAccountStatus({ disabled: !!ownerDisabled, deletedAt: ownerDeletedAt }),
+				lastSignInAt: row.type === "shared" ? null : ownerLastSignInAt ?? null,
 				permission: "full_access" as MailboxPermission,
 				isPrimary: `${row.localPart}@${row.hostname}` === user.email,
 			};
@@ -104,6 +111,8 @@ export async function listAccessibleMailboxes(db: AppDatabase, user: Pick<Sessio
 		return {
 			...mailbox,
 			hasAvatar: !!avatarKey,
+			status: "active" as const,
+			lastSignInAt: null,
 			isPrimary: false,
 		};
 	});

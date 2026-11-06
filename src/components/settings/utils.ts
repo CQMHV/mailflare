@@ -1,9 +1,9 @@
 import type { MailboxOption } from "@/components/mailbox-provider";
 import { clearMailboxesCache } from "@/components/mailbox-provider-utils";
 import { authFetch } from "@/lib/auth/client";
+import { requestError } from "@/lib/http/client-error";
 import type {
 	CurrentMailboxFormResponse,
-	ForwardingEmailResponse,
 	MailboxAutoReplyResponse,
 	MailboxAutoReplySettings,
 	MailboxSignatureResponse,
@@ -13,7 +13,6 @@ import type {
 	ChangePasswordResponse,
 	MfaEnrollmentResponse,
 	MfaRecoveryCodesResponse,
-	MfaStatusResponse,
 } from "./types";
 
 export function getMailboxAddress(mailbox: Pick<MailboxOption, "localPart" | "hostname">): string {
@@ -53,19 +52,6 @@ export async function loadAccountSettings(): Promise<Required<AccountSettingsRes
 	}
 
 	return data.user;
-}
-
-export async function updateForwardingEmail(forwardingEmail: string): Promise<string> {
-	const res = await authFetch("/api/settings/forwarding", {
-		method: "PATCH",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ forwardingEmail }),
-	});
-	const data = (await res.json()) as ForwardingEmailResponse;
-	if (!res.ok) {
-		throw new Error(typeof data.error === "string" ? data.error : "Failed to update forwarding email");
-	}
-	return data.forwardingEmail ?? "";
 }
 
 export async function updateMailboxSignature(mailboxId: string, signature: string): Promise<string> {
@@ -115,9 +101,7 @@ export async function updatePassword(currentPassword: string, newPassword: strin
 	});
 	const data = (await res.json()) as ChangePasswordResponse;
 
-	if (!res.ok) {
-		throw new Error(typeof data.error === "string" ? data.error : "Failed to change password");
-	}
+	if (!res.ok) throw requestError(data, "Failed to change password");
 }
 
 /** An API key limited to the JMAP scope, for external mail apps. */
@@ -133,25 +117,14 @@ export async function createJmapApiKey(name: string, mailboxIds: string[]): Prom
 	return data.key;
 }
 
-function errorMessage(data: { error?: unknown }, fallback: string): string {
-	return typeof data.error === "string" ? data.error : fallback;
-}
-
-export async function loadMfaStatus(): Promise<MfaStatusResponse> {
-	const res = await authFetch("/api/settings/mfa");
-	const data = (await res.json()) as MfaStatusResponse;
-	if (!res.ok) throw new Error(errorMessage(data, "Failed to load two-factor settings"));
-	return data;
-}
-
-export async function beginMfaEnrollment(password: string): Promise<Required<Pick<MfaEnrollmentResponse, "secret" | "otpauthUrl" | "qrSvg">>> {
+export async function beginMfaEnrollment(password: string | null, stepUpToken?: string): Promise<Required<Pick<MfaEnrollmentResponse, "secret" | "otpauthUrl" | "qrSvg">>> {
 	const res = await authFetch("/api/settings/mfa/enroll", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ password }),
+		body: JSON.stringify({ password: password ?? undefined, stepUpToken }),
 	});
 	const data = (await res.json()) as MfaEnrollmentResponse;
-	if (!res.ok || !data.secret || !data.otpauthUrl || !data.qrSvg) throw new Error(errorMessage(data, "Could not start enrolment"));
+	if (!res.ok || !data.secret || !data.otpauthUrl || !data.qrSvg) throw requestError(data, "Could not start enrolment");
 	return { secret: data.secret, otpauthUrl: data.otpauthUrl, qrSvg: data.qrSvg };
 }
 
@@ -162,27 +135,16 @@ export async function confirmMfaEnrollment(code: string): Promise<string[]> {
 		body: JSON.stringify({ code }),
 	});
 	const data = (await res.json()) as MfaRecoveryCodesResponse;
-	if (!res.ok || !data.recoveryCodes) throw new Error(errorMessage(data, "Could not confirm the code"));
+	if (!res.ok || !data.recoveryCodes) throw requestError(data, "Could not confirm the code");
 	return data.recoveryCodes;
 }
 
-export async function disableMfa(password: string, code: string): Promise<void> {
+export async function disableMfa(input: { password?: string; stepUpToken?: string }): Promise<void> {
 	const res = await authFetch("/api/settings/mfa/disable", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ password, code }),
+		body: JSON.stringify(input),
 	});
-	const data = (await res.json()) as { error?: unknown };
-	if (!res.ok) throw new Error(errorMessage(data, "Could not turn off two-factor authentication"));
-}
-
-export async function regenerateRecoveryCodes(password: string): Promise<string[]> {
-	const res = await authFetch("/api/settings/mfa/recovery-codes", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ password }),
-	});
-	const data = (await res.json()) as MfaRecoveryCodesResponse;
-	if (!res.ok || !data.recoveryCodes) throw new Error(errorMessage(data, "Could not generate new codes"));
-	return data.recoveryCodes;
+	const data = (await res.json()) as { error?: unknown; code?: unknown };
+	if (!res.ok) throw requestError(data, "Could not turn off two-factor authentication");
 }

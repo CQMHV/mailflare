@@ -1,7 +1,6 @@
 export type ProfileFormProps = {
-	initialName: string;
+	accountName: string;
 	initialResetEmail: string;
-	email: string;
 };
 
 export type ProfileFormResponse = {
@@ -23,13 +22,6 @@ export type AccountSettingsResponse = {
 		resetEmail: string | null;
 		forwardingEmail: string | null;
 	};
-	error?: unknown;
-};
-
-export type MfaStatusResponse = {
-	enabled: boolean;
-	confirmedAt: string | null;
-	recoveryCodesLeft: number;
 	error?: unknown;
 };
 

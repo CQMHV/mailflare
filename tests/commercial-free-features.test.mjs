@@ -43,8 +43,8 @@ await build({
 });
 const app = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 const apiKeys = {
-	admin: app.generateApiKey(), secondary: app.generateApiKey(), member: app.generateApiKey(),
-	wrongScope: app.generateApiKey(), foreign: app.generateApiKey(),
+	admin: await app.generateApiKey(), secondary: await app.generateApiKey(), member: await app.generateApiKey(),
+	wrongScope: await app.generateApiKey(), foreign: await app.generateApiKey(),
 };
 const params = id => ({ params: Promise.resolve({ id }) });
 
@@ -89,9 +89,9 @@ async function fixture(t) {
 			('foreign-shared','foreign','foreign','support','shared',1);
 	`);
 	assert.equal(database.db.prepare("SELECT count(*) AS count FROM license_settings").get().count, 0);
-	const insertKey = database.db.prepare("INSERT INTO api_keys (id,user_id,name,prefix,key_hash,scopes,created_at) VALUES (?,?,?,?,?,?,1)");
+	const insertKey = database.db.prepare("INSERT INTO api_keys (id,user_id,name,prefix,key_hash,key_sha256,scopes,created_at) VALUES (?,?,?,?,?,?,?,1)");
 	for (const [name, key] of Object.entries(apiKeys)) {
-		insertKey.run(name, name === "wrongScope" ? "admin" : name, name, key.prefix, key.hash,
+		insertKey.run(name, name === "wrongScope" ? "admin" : name, name, key.prefix, key.hash, key.sha256,
 			JSON.stringify(name === "wrongScope" ? ["messages"] : ["accounts", "mailboxes"]));
 	}
 	const env = { DB: database, BUCKET: new MemoryBucket(), MAILFLARE_RUNTIME: "node", ASSETS: { fetch: async () => new Response("default icon") } };

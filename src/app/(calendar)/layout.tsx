@@ -4,7 +4,7 @@ import { SkipToContent } from "@/components/skip-to-content";
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, Sparkles } from "lucide-react";
+import { ChevronDown, Sparkles } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { AgentPanel } from "@/components/agent/agent-panel";
 import { AssistantOpenContext } from "@/components/agent/assistant-open-state";
@@ -41,7 +41,7 @@ export default function CalendarLayout({ children }: { children: React.ReactNode
   }, [assistantEnabled, assistantOpen, assistantFullSize, setAssistantOpen, setAssistantFullSize]);
 
   return (
-    <AuthGuard>
+    <AuthGuard requireFeature="calendar">
       <SidebarProvider mobileOverlay>
         <MailboxProvider>
           <ComposeProvider>

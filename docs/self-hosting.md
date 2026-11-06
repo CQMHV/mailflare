@@ -19,7 +19,8 @@ container): the SQLite database, raw messages, attachments and backups.
 
 Behind a reverse proxy, set `APP_URL=https://mail.example.com` so links in
 password-reset mail and the JMAP session point at the public address, and
-forward WebSocket upgrades for `/api/realtime`.
+forward WebSocket upgrades for `/api/realtime`. Passkeys also bind to this
+origin, so they need `APP_URL` (or a direct HTTPS connection) to work.
 
 ### PWA and push notifications
 
@@ -108,6 +109,7 @@ and the DNS page shows what to set by hand.
 | `RESEND_API_KEY` | unset | Resend key, used when none is saved in the app |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | unset | Amazon SES credentials, used when none are saved in the app |
 | `INBOUND_WEBHOOK_SECRET` | unset | Enables `/api/inbound` for the relay Worker |
+| `INBOUND_REQUIRE_SIGNED_HEADERS` | unset | Set to `1` once the relay Worker is updated: refuses relays that do not sign the header map with a timestamp (older relays stay accepted without it, and their requests can be replayed) |
 | `TURNSTILE_SECRET_KEY` | unset | Bot protection on login and reset forms (`NEXT_PUBLIC_TURNSTILE_SITE_KEY` at build time) |
 | `VAPID_PUBLIC_KEY` | unset | Public Web Push application-server key |
 | `VAPID_PRIVATE_KEY` | unset | Secret Web Push application-server key |

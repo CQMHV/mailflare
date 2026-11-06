@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appSettings } from "@/db/schema";
 import { isManualZone } from "@/lib/domains/provision";
-import { hasMx, isInboundSmtpMx, publishMx, removeMx } from "@/lib/domains/receiving-dns";
+import { hasMx, hasMxMatching, isInboundSmtpMx, publishMx, removeMx } from "@/lib/domains/receiving-dns";
 import { getResendApiKey, getResendKeyStatus } from "@/lib/email/outbound-provider";
 import {
 	createResendDomain, createResendWebhook, deleteResendDomain, deleteResendWebhook, findResendDomain, getResendDomain,
@@ -11,6 +11,7 @@ import {
 import type { ReceivingStep } from "@/lib/aws/ses-receiving-types";
 import type { DomainRow } from "@/lib/domains/types";
 import type { ResendReceivingView } from "@/lib/domains/resend-receiving-types";
+import type { ResendDomainRecord } from "@/lib/email/resend-api-types";
 
 export const resendWebhookUrl = (origin: string) => `${origin.replace(/\/$/, "")}/api/inbound/resend`;
 
@@ -24,7 +25,7 @@ async function storeWebhook(env: CloudflareEnv, id: string | null, secret: strin
 	await getDb(env).insert(appSettings).values({ id: "default", ...values }).onConflictDoUpdate({ target: appSettings.id, set: values });
 }
 
-function inboundMx(records: { type: string; value: string; priority?: number }[] | undefined) {
+function inboundMx(records: ResendDomainRecord[] | undefined) {
 	return (records ?? []).find((record) => record.type === "MX" && isInboundSmtpMx(record.value)) ?? null;
 }
 
@@ -85,7 +86,13 @@ export async function getResendReceivingView(env: CloudflareEnv, domain: DomainR
 		const enabled = resend?.capabilities?.receiving === "enabled";
 		steps.push({ key: "domain", label: "Receiving enabled for this domain", ok: enabled, detail: !resend ? "Domain is not in Resend yet" : undefined });
 		const mx = inboundMx(resend?.records);
-		const mxOk = mx ? await hasMx(env, domain, mx.value) : false;
+		// A record Resend itself verified needs no second opinion. When Resend
+		// names no inbound MX, any published inbound-smtp target proves the record.
+		const mxOk = mx?.status === "verified"
+			? true
+			: mx
+				? await hasMx(env, domain, mx.value)
+				: await hasMxMatching(env, domain, isInboundSmtpMx);
 		steps.push({ key: "mx", label: "MX record points to Resend", ok: mxOk === true, detail: mxOk === null ? "Could not check DNS from here" : mx?.value ?? undefined });
 		steps.push({ key: "verified", label: "Domain verified", ok: resend?.status === "verified", detail: resend ? resend.status.replace(/_/g, " ") : undefined });
 		const hooks = await listResendWebhooks(key.apiKey);

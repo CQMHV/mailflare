@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useId, useRef } from "react";
-import { X, Keyboard } from "lucide-react";
+import { X, Keyboard } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { TranslationKey } from "@/lib/i18n/types";
 import type { ShortcutDefinition } from "./types";
@@ -61,7 +61,7 @@ function ShortcutsHelpDialogContent({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/40 backdrop-blur-xs animate-in fade-in duration-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/55 backdrop-blur-xs animate-in fade-in duration-100">
       <div
         className="fixed inset-0"
         onClick={onClose}

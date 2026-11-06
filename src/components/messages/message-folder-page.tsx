@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
-import { Archive, ChevronLeft, ChevronRight, ListFilter, Mail, MailOpen, Trash2 } from "lucide-react";
+import { Archive, ChevronLeft, ChevronRight, ListFilter, Mail, MailOpen, Trash2 } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,10 +19,11 @@ import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
 import type { Message } from "@/hooks/types";
 import { setMessageDragData } from "@/lib/messages/drag-utils";
 import { BulkMessageToolbar } from "./bulk-message-toolbar";
+import { useMessageListState } from "./message-list-state";
 import { SwipeableRow } from "./swipeable-row";
 import { MessageListRowActions } from "./message-list-row-actions";
 import { dispatchMessageCountsDelta, toggleMessageStar } from "./message-list-row-actions-utils";
-import { MessageNavigationProgress, useMessageNavigation } from "./message-navigation";
+import { useMessageNavigation } from "./message-navigation";
 import { rememberOpenedUnreadMessage } from "./message-detail-navigation-utils";
 import { useConversationView } from "./use-conversation-view";
 import { OpenedIndicator } from "./message-open-status";
@@ -58,10 +59,12 @@ function MessageListRow({
 	config,
 	selected,
 	active = false,
+	opening = false,
 	compact = false,
 	currentAccountName,
 	onSelectedChange,
 	onMessageAction,
+	onOpening,
 	dragMessageIds,
 }: MessageListRowProps) {
 	const { t } = useLanguage();
@@ -111,7 +114,9 @@ function MessageListRow({
 	const swipeable = compact && (config.folder === "inbox" || config.folder === "snoozed") && message.direction === "inbound";
 
 	function onMessageNavigate(event: MouseEvent<HTMLAnchorElement>) {
-		if (!read && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+		const plainClick = !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+		if (plainClick) onOpening?.();
+		if (!read && plainClick) {
 			rememberOpenedUnreadMessage(message.id);
 			const previousThreadUnread = threadUnread;
 			setRead(true);
@@ -130,7 +135,7 @@ function MessageListRow({
 		const compactRow = (
 			<div
 				role={swipeable ? undefined : "listitem"}
-				className={`group grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 transition-colors ${active
+				className={`group grid grid-cols-[20px_minmax(0,1fr)] gap-3 border-l-2 px-4 py-3 transition-colors ${active || opening
 					? "border-l-blue-600 bg-blue-50"
 					: selected
 						? "border-l-transparent bg-neutral-50"
@@ -142,14 +147,23 @@ function MessageListRow({
 					setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds });
 				}}
 			>
-				<MessageNavigationProgress progress={navigation.progress} />
 				<Checkbox
 					checked={selected}
 					onChange={(event) => onSelectedChange(message.id, event.target.checked)}
 					className="mt-1 h-4 w-4 rounded border-neutral-300"
 					aria-label={t("list.selectFrom", { sender: party })}
 				/>
-				<Link href={href} onClick={config.folder === "drafts" ? undefined : onMessageNavigate} aria-current={active ? "true" : undefined} className="min-w-0">
+				<Link
+					href={href}
+					onClick={config.folder === "drafts" ? undefined : onMessageNavigate}
+					onPointerEnter={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onPointerLeave={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
+					onFocus={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onBlur={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
+					onTouchStart={config.folder === "drafts" ? undefined : navigation.prefetchNow}
+					aria-current={active ? "true" : undefined}
+					className="min-w-0"
+				>
 					<span className="flex items-baseline justify-between gap-3">
 						<span className={clsx(unread && "font-semibold",getMessagePartyClassName(rowMessage, config.folder))}>
 							{unread && <span className="sr-only">{t("list.unread")} </span>}
@@ -199,7 +213,7 @@ function MessageListRow({
 	}
 
 	const className =
-		`group relative grid min-h-12 w-full grid-cols-[24px_32px_minmax(160px,80px)_1fr_auto] items-center gap-3 px-6 text-left text-sm hover:z-10 hover:bg-[#f2f6fc] hover:shadow-sm has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-inset has-[a:focus-visible]:ring-blue-600 ${active || selected ? "bg-blue-50" : ""
+		`group relative grid min-h-12 w-full grid-cols-[24px_32px_minmax(160px,80px)_1fr_auto] items-center gap-3 px-6 text-left text-sm hover:z-10 hover:bg-[#f2f6fc] hover:shadow-sm has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-inset has-[a:focus-visible]:ring-blue-600 ${active || selected || opening ? "bg-blue-50" : ""
 		} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`;
 	const content = (
 		<>
@@ -235,6 +249,11 @@ function MessageListRow({
 				<Link
 					href={href}
 					onClick={config.folder === "drafts" ? undefined : onMessageNavigate}
+					onPointerEnter={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onPointerLeave={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
+					onFocus={config.folder === "drafts" ? undefined : navigation.prefetch}
+					onBlur={config.folder === "drafts" ? undefined : navigation.cancelPrefetch}
+					onTouchStart={config.folder === "drafts" ? undefined : navigation.prefetchNow}
 					aria-current={active ? "true" : undefined}
 					className="focus-visible:outline-none after:absolute after:inset-0"
 				>
@@ -279,7 +298,6 @@ function MessageListRow({
 				setMessageDragData(event.dataTransfer, { messageIds: dragMessageIds });
 			}}
 		>
-			<MessageNavigationProgress progress={navigation.progress} />
 			<Checkbox
 				checked={selected}
 				onChange={(event) => onSelectedChange(message.id, event.target.checked)}
@@ -301,23 +319,43 @@ export function MessageFolderPage({
 	config,
 	compact = false,
 	selectedMessageId,
-	selection,
 }: MessageFolderPageProps) {
 	const { t } = useLanguage();
 	const title = config.titleKey ? t(config.titleKey) : config.title;
 	const { selectedMailbox, isLoading: mailboxesLoading } = useSelectedMailbox();
 	const { query } = useMailSearch();
 	const isMobile = useIsMobile();
-	const [offset, setOffset] = useState(0);
+	const listState = useMessageListState();
+	const usesSharedListState = listState !== null;
+	const [internalOffset, setInternalOffset] = useState(0);
 	const [internalSelectedMessages, setInternalSelectedMessages] = useState<
 		Array<{ id: string; read: boolean }>
 	>([]);
+	const [internalUnreadOnly, setInternalUnreadOnly] = useState(false);
 	const [pendingBulkAction, setPendingBulkAction] = useState(false);
 	const [emptyingFolder, setEmptyingFolder] = useState(false);
 	const [actionError, setActionError] = useState<string | null>(null);
-	const [unreadOnly, setUnreadOnly] = useState(false);
+	const [openingMessageId, setOpeningMessageId] = useState<string | null>(null);
+	const openingTimer = useRef<number | null>(null);
 	const [conversationView] = useConversationView();
+	const visibleOpeningMessageId = openingMessageId === selectedMessageId ? null : openingMessageId;
+
+	useEffect(() => () => {
+		if (openingTimer.current) window.clearTimeout(openingTimer.current);
+	}, []);
+
+	function markMessageOpening(messageId: string) {
+		setOpeningMessageId(messageId);
+		if (openingTimer.current) window.clearTimeout(openingTimer.current);
+		openingTimer.current = window.setTimeout(() => setOpeningMessageId(null), 3000);
+	}
 	const grouped = conversationView && config.folder !== "drafts";
+	const offset = listState?.offset ?? internalOffset;
+	const setOffset = listState?.setOffset ?? setInternalOffset;
+	const selectedMessages = listState?.selectedMessages ?? internalSelectedMessages;
+	const setSelectedMessages = listState?.setSelectedMessages ?? setInternalSelectedMessages;
+	const unreadOnly = listState?.unreadOnly ?? internalUnreadOnly;
+	const setUnreadOnly = listState?.setUnreadOnly ?? setInternalUnreadOnly;
 	const { messages, isLoading, total, limit, updateMessages } = useMessages(config.folder, selectedMailbox?.id, {
 		query,
 		limit: pageSize,
@@ -326,7 +364,7 @@ export function MessageFolderPage({
 		group: grouped ? "thread" : undefined,
 	}, !mailboxesLoading, config.folderId);
 	const { counts } = useMessageCounts(selectedMailbox?.id, !mailboxesLoading);
-	usePageLoading(mailboxesLoading || isLoading);
+	usePageLoading(mailboxesLoading || isLoading, true);
 	const headerIcons = config.headerIcons ?? [];
 	const hasActiveFilters = !!query.trim();
 	const folderCount = config.folderId
@@ -337,9 +375,6 @@ export function MessageFolderPage({
 	const mailboxAddress = getMailboxAddress(selectedMailbox);
 	const currentAccountName = selectedMailbox?.displayName ?? selectedMailbox?.localPart;
 	const pageRange = getPageRange(offset, messages.length, total);
-	const selectedMessages = selection?.selectedMessages ?? internalSelectedMessages;
-	const setSelectedMessages =
-		selection?.setSelectedMessages ?? setInternalSelectedMessages;
 	const selectedIds = useMemo(
 		() => selectedMessages.map((message) => message.id),
 		[selectedMessages],
@@ -352,14 +387,20 @@ export function MessageFolderPage({
 	const expandSelectedIds = (ids: string[]) =>
 		ids.flatMap((id) => rowMessageIds(messages.find((message) => message.id === id) ?? { id } as Message));
 
+	// A split-layout list keeps this state in MessageSplitLayout, which resets
+	// it when the list view changes. Standalone lists (drafts) own it here.
 	useEffect(() => {
+		if (usesSharedListState) return;
 		setOffset(0);
 		setSelectedMessages([]);
-	}, [query, selectedMailbox?.id, config.folder, config.folderId, unreadOnly, grouped]);
+	}, [usesSharedListState, query, selectedMailbox?.id, config.folder, config.folderId, unreadOnly, grouped, setOffset, setSelectedMessages]);
 
+	const previousOffset = useRef(offset);
 	useEffect(() => {
+		if (previousOffset.current === offset) return;
+		previousOffset.current = offset;
 		setSelectedMessages([]);
-	}, [offset]);
+	}, [offset, setSelectedMessages]);
 
 	useEffect(() => {
 		const originalTitle = document.title;
@@ -385,12 +426,12 @@ export function MessageFolderPage({
 			const remaining = current.filter((item) => messages.some((message) => message.id === item.id));
 			return remaining.length === current.length ? current : remaining;
 		});
-	}, [messages, isLoading]);
+	}, [messages, isLoading, setSelectedMessages]);
 
 	useEffect(() => {
 		if (isLoading || offset === 0 || messages.length > 0) return;
 		setOffset(total > 0 ? Math.floor((total - 1) / limit) * limit : 0);
-	}, [isLoading, offset, messages.length, total, limit]);
+	}, [isLoading, offset, messages.length, total, limit, setOffset]);
 
 	function updateSelectedMessage(messageId: string, selected: boolean) {
 		const message = messages.find((item) => item.id === messageId);
@@ -597,6 +638,8 @@ export function MessageFolderPage({
 							config={config}
 							selected={selectedIds.includes(message.id)}
 							active={message.id === selectedMessageId}
+							opening={message.id === visibleOpeningMessageId}
+							onOpening={() => markMessageOpening(message.id)}
 							compact={compact || isMobile}
 							currentAccountName={currentAccountName}
 							onSelectedChange={updateSelectedMessage}

@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
-import { Folder, Server, Upload } from "lucide-react";
+import { Folder, Server, Upload } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { useSelectedMailbox } from "@/components/mailbox-provider";

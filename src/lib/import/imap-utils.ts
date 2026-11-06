@@ -49,6 +49,11 @@ export function isPermanentImapError(message: string): boolean {
 	return /login|auth|credential|not allowed|unreadable|no longer exists/i.test(message);
 }
 
+/** A folder the server says does not exist or cannot be selected, such as Gmail's `[Gmail]` parent. */
+export function isMissingImapFolderError(message: string): boolean {
+	return /NONEXISTENT|unknown mailbox|mailbox (?:does not|doesn't) exist|nonexistent namespace|NOSELECT/i.test(message);
+}
+
 /** FETCH commands sent back to back, and the raw mail one group may hold before the next is requested. */
 const IMAP_PIPELINE_COUNT = 10;
 const IMAP_PIPELINE_BYTES = 4 * 1024 * 1024;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE } from "@/lib/security/public-url";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
 import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
@@ -52,15 +53,19 @@ export const registerSchema = z.object({
 	name: z.string().min(1),
 });
 
-export const firstRunRegisterSchema = z.object({
-	domain: z.string().min(3),
-	enableSending: z.boolean().optional(),
-	replaceMxRecords: z.boolean().optional(),
-	skipDns: z.boolean().optional(),
-	username: z.string().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/),
-	password: z.string().min(8),
-	resetEmail: z.string().email(),
-});
+export const firstRunRegisterSchema = z
+	.object({
+		domain: z.string().min(3),
+		enableSending: z.boolean().optional(),
+		replaceMxRecords: z.boolean().optional(),
+		skipDns: z.boolean().optional(),
+		username: z.string().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/),
+		password: z.string().min(8).optional(),
+		/** Create the first account with a passkey only; the password may be omitted. */
+		usePasskey: z.boolean().optional(),
+		resetEmail: z.string().email(),
+	})
+	.refine((value) => value.usePasskey || !!value.password, { message: "Enter a password or choose a passkey", path: ["password"] });
 
 export const primaryDomainRegisterSchema = z.object({
 	username: z.string().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/),
@@ -110,18 +115,105 @@ export const mfaVerifySchema = z.object({
 	code: z.string().trim().min(6).max(32),
 });
 
-export const mfaEnrollSchema = z.object({
-	password: z.string().min(1),
+export const passkeyCeremonySchema = z.object({
+	ceremonyToken: z.string().min(8).max(200),
+	response: z.unknown(),
 });
+
+export const passkeyMfaOptionsSchema = z.object({
+	challengeToken: z.string().min(8).max(200),
+});
+
+export const passkeyMfaVerifySchema = passkeyCeremonySchema.extend({
+	challengeToken: z.string().min(8).max(200),
+});
+
+export const stepUpActionSchema = z.enum([
+	"passkey.add",
+	"passkey.remove",
+	"password.set",
+	"password.remove",
+	"mfa.enroll",
+	"mfa.disable",
+	"mfa.codes",
+	"second_factor.toggle",
+	"admin.password_reset",
+	"admin.recovery_link",
+]);
+
+export const passkeyRegistrationSchema = passkeyCeremonySchema.extend({
+	name: z.string().trim().max(100).optional().default(""),
+	stepUpToken: z.string().min(8).max(200).optional(),
+});
+
+export const passkeySetupSchema = passkeyCeremonySchema.extend({
+	token: z.string().min(8).max(200),
+	name: z.string().trim().max(100).optional().default(""),
+});
+
+export const passkeySetupOptionsSchema = z.object({
+	token: z.string().min(8).max(200),
+});
+
+export const passkeyAddOptionsSchema = z.object({
+	stepUpToken: z.string().min(8).max(200),
+});
+
+export const passkeyStepUpSchema = z.object({
+	password: z.string().min(1).max(128),
+	code: z.string().trim().min(6).max(32).optional(),
+	action: stepUpActionSchema,
+	targetUserId: z.string().min(1).max(191).optional(),
+});
+
+export const passkeyStepUpOptionsSchema = z.object({
+	action: stepUpActionSchema,
+	targetUserId: z.string().min(1).max(191).optional(),
+});
+
+export const passkeyStepUpVerifySchema = passkeyCeremonySchema.extend({
+	action: stepUpActionSchema,
+	targetUserId: z.string().min(1).max(191).optional(),
+});
+
+export const stepUpTokenSchema = z.object({
+	stepUpToken: z.string().min(8).max(200),
+});
+
+export const passkeyRenameSchema = z.object({
+	name: z.string().trim().min(1).max(100),
+});
+
+export const passwordSetSchema = z.object({
+	newPassword: z.string().min(8).max(128),
+	stepUpToken: z.string().min(8).max(200),
+	requireSecondFactor: z.boolean().optional(),
+});
+
+export const requireSecondFactorSchema = z.object({
+	enabled: z.boolean(),
+	stepUpToken: z.string().min(8).max(200),
+});
+
+export const mfaEnrollSchema = z
+	.object({
+		password: z.string().min(1).optional(),
+		stepUpToken: z.string().min(8).max(200).optional(),
+		code: z.string().trim().min(6).max(32).optional(),
+	})
+	.refine((value) => value.password || value.stepUpToken, { message: "Verify your identity first" });
 
 export const mfaConfirmSchema = z.object({
 	code: z.string().trim().min(6).max(12),
 });
 
-export const mfaDisableSchema = z.object({
-	password: z.string().min(1),
-	code: z.string().trim().min(6).max(32),
-});
+export const mfaDisableSchema = z
+	.object({
+		password: z.string().min(1).optional(),
+		stepUpToken: z.string().min(8).max(200).optional(),
+		code: z.string().trim().min(6).max(32).optional(),
+	})
+	.refine((value) => value.password || value.stepUpToken, { message: "Verify your identity first" });
 
 export const domainSchema = z.object({
 	hostname: z.string().min(3),
@@ -142,6 +234,8 @@ export const updateManagedAccountSchema = z.object({
 	canManageMailboxes: z.boolean(),
 	canManageDomains: z.boolean().optional(),
 	canManageUsers: z.boolean().optional(),
+	calendarEnabled: z.boolean().optional(),
+	driveEnabled: z.boolean().optional(),
 	forwardingEmail: z.preprocess(
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().email().or(z.literal("")).nullable().optional().transform((value) => value === undefined ? undefined : value || null),
@@ -151,6 +245,8 @@ export const updateManagedAccountSchema = z.object({
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().min(8).max(128).or(z.literal("")).optional().transform((value) => value || null),
 	),
+	/** Required when `password` is set: the administrator must re-authenticate. */
+	stepUpToken: z.string().min(8).max(200).optional(),
 });
 
 export const createAccountSchema = z.object({
@@ -279,7 +375,8 @@ export const routingRuleSchema = z.object({
 	mailboxId: z.string().min(1),
 	folderId: z.string().optional(),
 	destination: z.string().min(1).optional(),
-	forwardTo: z.string().email().optional(),
+	forwardTo: z.string().trim().email().optional(),
+	keepCopy: z.boolean().optional(),
 	priority: z.number().int().default(0),
 });
 
@@ -338,7 +435,7 @@ export const domainRoutingRuleSchema = z
 	});
 
 export const webhookSchema = z.object({
-	url: z.string().url().max(2048),
+	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE),
 	description: z.string().trim().max(200).optional(),
 	events: z
 		.array(z.enum(["message.inbound", "message.outbound", "message.failed"]))
@@ -348,7 +445,7 @@ export const webhookSchema = z.object({
 });
 
 export const webhookUpdateSchema = z.object({
-	url: z.string().url().max(2048).optional(),
+	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE).optional(),
 	description: z.string().trim().max(200).nullish(),
 	events: z
 		.array(z.enum(["message.inbound", "message.outbound", "message.failed"]))

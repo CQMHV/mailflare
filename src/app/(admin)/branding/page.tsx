@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, Palette } from "lucide-react";
+import { ImagePlus, Palette } from "@/components/icons";
 import { useLanguage } from "@/components/language-provider";
 import { useBranding } from "@/components/branding-provider";
 import { Button } from "@/components/ui/button";

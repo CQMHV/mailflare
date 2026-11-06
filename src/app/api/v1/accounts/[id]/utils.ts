@@ -6,8 +6,9 @@ import { users } from "@/db/schema";
 import { authenticateAdminApiKey } from "@/lib/api/admin-auth";
 import { isPrimaryAdmin } from "@/lib/auth/admin";
 import { updateManagedAccountSchema } from "@/lib/validators";
-import { selectAccountById, updateAccountCredentials } from "@/app/api/accounts/[id]/utils";
+import { AccountSecurityChangedError, PasskeyOnlyPasswordError, selectAccountById, updateAccountCredentials } from "@/app/api/accounts/[id]/utils";
 import { deleteUserSessions } from "@/lib/auth/session";
+import { createAuditLog } from "@/lib/mailboxes/audit";
 import type { AdminAccountRouteParams } from "./types";
 
 export async function GET(request: Request, { params }: AdminAccountRouteParams) {
@@ -20,6 +21,7 @@ export async function GET(request: Request, { params }: AdminAccountRouteParams)
 	return NextResponse.json({ account: {
 		id: account.id, email: account.email, name: account.name, role: account.role,
 		disabled: account.disabled, canManageMailboxes: account.canManageMailboxes,
+		calendarEnabled: account.calendarEnabled, driveEnabled: account.driveEnabled,
 		forwardingEmail: account.forwardingEmail, hasAvatar: !!account.avatarKey,
 	} });
 }
@@ -37,14 +39,34 @@ export async function PATCH(request: Request, { params }: AdminAccountRouteParam
 	if (!isPrimaryAdmin(auth.user) && (account.isPrimaryAdmin || account.role === "admin" || parsed.data.role !== account.role)) {
 		return NextResponse.json({ error: "Only the primary admin can manage admin accounts" }, { status: 403 });
 	}
-	await updateAccountCredentials(db, id, { name: parsed.data.name, password: parsed.data.password ?? null });
-	if (parsed.data.password) await deleteUserSessions(env, id);
+	try {
+		await updateAccountCredentials(db, id, { name: parsed.data.name, password: parsed.data.password ?? null });
+	} catch (error) {
+		if (error instanceof PasskeyOnlyPasswordError) {
+			return NextResponse.json({ error: "This account uses passkeys only. Send it a recovery link instead.", code: "passkey_only_password" }, { status: 409 });
+		}
+		if (error instanceof AccountSecurityChangedError) {
+			return NextResponse.json({ error: "Another security change is in progress. Refresh and try again.", code: "action_conflict" }, { status: 409 });
+		}
+		throw error;
+	}
+	if (parsed.data.password) {
+		await deleteUserSessions(env, id);
+		await createAuditLog(env, {
+			actorUserId: auth.userId,
+			targetUserId: id,
+			action: "auth.admin_password_reset",
+			metadata: { ipAddress: request.headers.get("cf-connecting-ip") ?? "unknown" },
+		});
+	}
 	await db.update(users).set({
 		role: account.isPrimaryAdmin ? "admin" : parsed.data.role,
 		disabled: account.isPrimaryAdmin ? false : parsed.data.disabled,
 		canManageMailboxes: parsed.data.canManageMailboxes,
 		...(isPrimaryAdmin(auth.user) && parsed.data.canManageDomains !== undefined ? { canManageDomains: parsed.data.canManageDomains } : {}),
 		...(isPrimaryAdmin(auth.user) && parsed.data.canManageUsers !== undefined ? { canManageUsers: parsed.data.canManageUsers } : {}),
+		...(parsed.data.calendarEnabled !== undefined ? { calendarEnabled: parsed.data.calendarEnabled } : {}),
+		...(parsed.data.driveEnabled !== undefined ? { driveEnabled: parsed.data.driveEnabled } : {}),
 		...(parsed.data.forwardingEmail !== undefined ? { forwardingEmail: parsed.data.forwardingEmail } : {}),
 	}).where(eq(users.id, id));
 	return NextResponse.json({ ok: true });

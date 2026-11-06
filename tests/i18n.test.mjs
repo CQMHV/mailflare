@@ -124,6 +124,12 @@ test("translation uses the requested catalog and falls back per key", async () =
 	assert.equal(i18n.translate({}, "navigation.inbox"), "Inbox");
 });
 
+test("existing locale-specific plural translations remain available", async () => {
+	const catalog = await i18n.loadMessages("pl");
+	assert.equal(catalog["thread.attachmentCount.few"], "{count} załączniki");
+	assert.equal(i18n.createTranslator("pl", catalog)("thread.attachmentCount", { count: 3 }), "3 załączniki");
+});
+
 test("preference cookie persists for a year, covers every path and is Secure on HTTPS", () => {
 	assert.equal(i18n.serializeLocaleCookie("pt-BR", true), "mailflare-locale=pt-BR; Path=/; Max-Age=31536000; SameSite=Lax; Secure");
 	assert.equal(i18n.serializeLocaleCookie("en", false), "mailflare-locale=en; Path=/; Max-Age=31536000; SameSite=Lax");
@@ -152,7 +158,9 @@ test("root layout passes the same cookie locale to HTML and provider on first re
 
 test("a locale registered once reaches resolution, translation, cookie, selector and SSR", async () => {
 	assert.ok(existsSync(join(root, "src/lib/i18n/locales.ts")), "locales must have one shared registry");
-	// Use a real Intl locale so plural rules do not depend on the host language.
+	// Use an ICU-supported locale absent from the registry. Unknown codes such as
+	// xx fall back to the host locale, which may not have a "one" plural category.
+	assert.equal(Object.hasOwn(i18n.locales, "he"), false);
 	globalThis.testCatalogs.he = { ...en, "navigation.inbox": "Entrada", "navigation.inbox.one": "{count} entrada", "navigation.inbox.other": "{count} entradas", "language.label": "Idioma" };
 	const extraFile = join(outDir, "with-spanish.mjs");
 	await bundleI18n(extraFile, true);

@@ -11,16 +11,11 @@ export async function GET(request: Request) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	let hasMailboxes = false;
-	let isSetup = true;
-	try {
-		[hasMailboxes, isSetup] = await Promise.all([
-			userHasMailboxes(env, user.id),
-			hasPrimaryDomain(env),
-		]);
-	} catch {
-		// Authentication remains valid when optional mailbox/setup metadata is unavailable.
-	}
+	// Authentication remains valid when optional mailbox/setup metadata is unavailable.
+	const [hasMailboxes, isSetup] = await Promise.all([
+		userHasMailboxes(env, user.id),
+		hasPrimaryDomain(env),
+	]).catch((): [boolean, boolean] => [false, true]);
 	return NextResponse.json({
 		user: {
 			id: user.id,
@@ -34,6 +29,8 @@ export async function GET(request: Request) {
 			canManageMailboxes: user.canManageMailboxes,
 			canManageDomains: user.canManageDomains,
 			canManageUsers: user.canManageUsers,
+			calendarEnabled: user.calendarEnabled,
+			driveEnabled: user.driveEnabled,
 			keyboardShortcutsEnabled: user.keyboardShortcutsEnabled,
 			spamProtectionEnabled: user.spamProtectionEnabled,
 			showFullRecipientAddresses: user.showFullRecipientAddresses,
