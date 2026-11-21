@@ -1,4 +1,4 @@
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { domains, mailboxes } from "@/db/schema";
 import { ensureMailboxDomainRouting } from "@/lib/mailboxes/domain-addresses";
@@ -11,6 +11,7 @@ import {
 	deleteSendingSubdomain,
 	listSendingSubdomains,
 	type CfDnsRecord,
+	type EmailRoutingRuleCache,
 } from "@/lib/cloudflare-api";
 import { deleteEmailRoutingRulesForDomain } from "@/lib/domains/cloudflare-cleanup";
 import { isManualZone, provisionDomainOnCloudflare } from "@/lib/domains/provision";
@@ -19,6 +20,7 @@ import { rollbackDomainProvisioning } from "@/lib/domains/rollback";
 import type { DomainProvisioningChanges } from "@/lib/domains/types";
 import { findSendingSubdomain } from "@/lib/domains/sending-status";
 import { preflightDomain } from "@/lib/domains/preflight";
+import { normalizeHostname } from "@/lib/domains/utils";
 import { hasCloudflareCredentials } from "@/lib/runtime";
 
 export type DomainDnsView = {
@@ -31,9 +33,10 @@ export type DomainDnsView = {
 	sendingSubdomain?: { name: string; tag: string };
 };
 
-export async function listUserDomains(env: CloudflareEnv, userId: string) {
+export async function listUserDomains(env: CloudflareEnv, userIds: string | string[]) {
 	const db = getDb(env);
-	return db.select().from(domains).where(eq(domains.userId, userId));
+	const ids = Array.isArray(userIds) ? userIds : [userIds];
+	return db.select().from(domains).where(ids.length === 1 ? eq(domains.userId, ids[0]) : inArray(domains.userId, ids));
 }
 
 export async function addDomainForUser(
@@ -47,7 +50,7 @@ export async function addDomainForUser(
 	changes: DomainProvisioningChanges;
 }> {
 	const db = getDb(env);
-	const normalizedHostname = hostname.toLowerCase().trim();
+	const normalizedHostname = normalizeHostname(hostname);
 	const [claimedHostname] = await db.select({ userId: domains.userId }).from(domains).where(eq(domains.hostname, normalizedHostname)).limit(1);
 	if (claimedHostname && claimedHostname.userId !== userId) {
 		throw new Error("Domain is already registered");
@@ -73,7 +76,8 @@ export async function addDomainForUser(
 		...options,
 		enableSending: requestedSending === "cloudflare",
 		enableRouting: receivingProvider === "cloudflare" ? (options?.enableRouting ?? true) : false,
-		replaceMxRecords: receivingProvider === "cloudflare" ? options?.replaceMxRecords : false,
+		// Routing is skipped for other receivers, so this only reaches the sending step then.
+		replaceMxRecords: options?.replaceMxRecords,
 	});
 	let insertedDomainId: string | null = null;
 	let domain: typeof domains.$inferSelect;
@@ -113,8 +117,9 @@ export async function addDomainForUser(
 			.from(mailboxes)
 			.innerJoin(domains, eq(mailboxes.domainId, domains.id))
 			.where(and(eq(domains.userId, userId), eq(mailboxes.useAllDomains, true)));
+		const ruleCache: EmailRoutingRuleCache = new Map();
 		const routingResults = await Promise.allSettled(
-			aliasMailboxes.map((mailbox) => ensureMailboxDomainRouting(env, db, mailbox)),
+			aliasMailboxes.map((mailbox) => ensureMailboxDomainRouting(env, db, mailbox, undefined, ruleCache)),
 		);
 		for (const result of routingResults) {
 			if (result.status === "rejected") console.warn("ensureMailboxDomainRouting", result.reason);
@@ -246,4 +251,15 @@ export async function getDomainForUser(env: CloudflareEnv, userId: string, domai
 		.where(and(eq(domains.id, domainId), eq(domains.userId, userId)))
 		.limit(1);
 	return domain ?? null;
+}
+
+/**
+ * Columns to write when the operator flips the "DNS skipped" flag. A skipped
+ * domain on the manual zone was stored as pending, and nothing else activates
+ * it without Cloudflare credentials, so confirming the records are in place
+ * makes it live the way a manual domain added without skipping already is.
+ */
+export function dnsSkippedUpdate(domain: typeof domains.$inferSelect, dnsSkipped: boolean): Partial<typeof domains.$inferInsert> {
+	if (dnsSkipped || !isManualZone(domain.zoneId) || domain.status === "active") return { dnsSkipped };
+	return { dnsSkipped, status: "active", routingEnabled: true, routingStatus: "manual" };
 }

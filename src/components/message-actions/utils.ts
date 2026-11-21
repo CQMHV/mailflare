@@ -1,8 +1,10 @@
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
+import { confirmDestructive } from "@/components/ui/confirm-dialog";
 import { authFetch } from "@/lib/auth/client";
 import { throwIfDeleteSkipped } from "@/lib/messages/permanent-delete-utils";
 import { dispatchMessagesChanged } from "@/lib/messages/change-events";
-import { markMessagesReadInCaches } from "@/hooks/utils";
+import { performMessageAction } from "@/lib/messages/actions/client";
+import { isReversibleMessageAction } from "@/lib/messages/actions/definitions";
 import { getEmailAddress, normalizeEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getLatestEmailContent } from "@/lib/email/reply-content-utils";
 import { formatUserDate } from "@/lib/time/utils";
@@ -42,7 +44,17 @@ export function getMessageBackHref(
 export async function runSingleMessageAction(
   messageId: string,
   action: BulkMessageAction,
+  options: { undo?: boolean; notify?: boolean } = {},
 ) {
+  if (isReversibleMessageAction(action)) {
+    await performMessageAction(
+      { action, messageIds: [messageId] },
+      { undo: options.undo !== false, notify: options.notify !== false },
+    );
+    return;
+  }
+  if (action !== "delete") throw new Error("Unable to update message");
+
   const response = await authFetch("/api/messages/bulk", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -54,10 +66,7 @@ export async function runSingleMessageAction(
   }
 
   await throwIfDeleteSkipped(response, action);
-  const readChanged = action === "read" || action === "unread";
-  if (readChanged) markMessagesReadInCaches([messageId], action === "read");
-  if (readChanged) dispatchMessagesChanged({ kind: "read", messageIds: [messageId], read: action === "read" });
-  else dispatchMessagesChanged();
+  dispatchMessagesChanged({ kind: "removed", action: "delete", messageIds: [messageId] });
 }
 
 export function openUnsubscribeUrl(url: string) {
@@ -65,7 +74,7 @@ export function openUnsubscribeUrl(url: string) {
 }
 
 export function confirmTrashWithoutUnsubscribe() {
-  return window.confirm(
+  return confirmDestructive(
     "This email does not provide an unsubscribe link. It will be moved to Trash, and future emails from this sender will also be moved to Trash.",
   );
 }

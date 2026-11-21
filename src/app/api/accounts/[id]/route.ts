@@ -9,9 +9,10 @@ import type { AccountRouteParams } from "./types";
 import { AccountSecurityChangedError, PasskeyOnlyPasswordError, selectAccountById, updateAccountCredentials } from "./utils";
 import { deleteUserSessions, getSessionTokenFromRequestHeaders } from "@/lib/auth/session";
 import { hasPasswordHash } from "@/lib/auth/password";
-import { consumeStepUpGrant } from "@/lib/auth/webauthn/grants";
+import { bumpSecurityVersion, consumeStepUpGrant } from "@/lib/auth/webauthn/grants";
 import { createAuditLog } from "@/lib/mailboxes/audit";
 import { authError } from "@/lib/http/auth-error";
+import { hasValidSessionMutationOrigin } from "@/lib/auth/origin";
 
 export async function GET(request: Request, { params }: AccountRouteParams) {
 	const access = await requireAccountAdmin(request);
@@ -35,7 +36,7 @@ export async function GET(request: Request, { params }: AccountRouteParams) {
 			canManageUsers: account.canManageUsers,
 			calendarEnabled: account.calendarEnabled,
 			driveEnabled: account.driveEnabled,
-			forwardingEmail: account.forwardingEmail,
+			...(canManageUsers(actor) ? { forwardingEmail: account.forwardingEmail } : {}),
 			hasAvatar: !!account.avatarKey,
 			passwordSet: hasPasswordHash(account.passwordHash),
 			editable: canManageUserAccount(actor, account),
@@ -48,6 +49,7 @@ export async function GET(request: Request, { params }: AccountRouteParams) {
 export async function PATCH(request: Request, { params }: AccountRouteParams) {
 	const access = await requireAccountAdmin(request);
 	if (access.error) return access.error;
+	if (!hasValidSessionMutationOrigin(request)) return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
 	const { id } = await params;
 	const db = getDb(access.env);
 	const account = await selectAccountById(db, id);
@@ -70,6 +72,24 @@ export async function PATCH(request: Request, { params }: AccountRouteParams) {
 	if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 	if (!actorIsPrimary && parsed.data.role !== account.role) {
 		return NextResponse.json({ error: "Only the primary admin can change roles" }, { status: 403 });
+	}
+	// A forwarding address receives a copy of the account's mail: changing it needs fresh proof from the
+	// administrator, bound to this account, like a password reset (one proof covers one change).
+	const forwardingChanged = parsed.data.forwardingEmail !== undefined && parsed.data.forwardingEmail !== account.forwardingEmail;
+	if (forwardingChanged && parsed.data.password) {
+		return NextResponse.json({ error: "Change the password and the forwarding address separately" }, { status: 400 });
+	}
+	if (forwardingChanged) {
+		const sessionToken = getSessionTokenFromRequestHeaders(request);
+		if (!parsed.data.stepUpToken || !sessionToken || !(await consumeStepUpGrant(access.env, {
+			token: parsed.data.stepUpToken,
+			userId: actor.id,
+			sessionToken,
+			action: "admin.forwarding_email",
+			targetUserId: id,
+		}))) {
+			return authError("verification_failed", 401);
+		}
 	}
 	// A passkey-only account must be recovered through a passkey enrolment link,
 	// not by silently giving it a password that bypasses its recovery policy.
@@ -122,5 +142,7 @@ export async function PATCH(request: Request, { params }: AccountRouteParams) {
 		...(parsed.data.driveEnabled !== undefined ? { driveEnabled: parsed.data.driveEnabled } : {}),
 		...(parsed.data.forwardingEmail !== undefined ? { forwardingEmail: parsed.data.forwardingEmail } : {}),
 	}).where(eq(users.id, id));
+	// Proofs issued before the address moved no longer apply to this account.
+	if (forwardingChanged) await bumpSecurityVersion(db, id);
 	return NextResponse.json({ ok: true });
 }

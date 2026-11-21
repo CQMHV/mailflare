@@ -151,7 +151,7 @@ export async function verifyPasskeyAuthentication(
 	const user = dbUser
 		? dbUser
 		: (
-				await getDb(env).select().from(users).where(eq(users.id, passkey.userId)).limit(1)
+				await getDb(env).select({ id: users.id, email: users.email, name: users.name, disabled: users.disabled, deletedAt: users.deletedAt }).from(users).where(eq(users.id, passkey.userId)).limit(1)
 			)[0];
 	if (!user || user.disabled || user.deletedAt) throw new PasskeyVerificationError("account_disabled");
 	if (user.id !== passkey.userId) throw new PasskeyVerificationError("passkey_not_found");

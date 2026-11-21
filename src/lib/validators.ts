@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE } from "@/lib/security/public-url";
+import { isValidHostname, normalizeHostname } from "@/lib/domains/utils";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
+import { normalizeRecipientLocalPart } from "@/lib/email/recipient-address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
 import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
+import { isValidBase64 } from "@/lib/email/base64";
 
 /**
  * Recipients arrive either as one comma-separated header string (the composer)
@@ -40,7 +43,7 @@ export const sendEmailSchema = z.object({
 			z.object({
 					filename: z.string().min(1).max(255),
 					type: z.string().min(1).max(255).default("application/octet-stream"),
-					contentBase64: z.string().min(1).max(14 * 1024 * 1024),
+					contentBase64: z.string().min(1).max(14 * 1024 * 1024).refine(isValidBase64, "contentBase64 must be standard base64"),
 			}),
 		)
 		.max(10)
@@ -53,9 +56,15 @@ export const registerSchema = z.object({
 	name: z.string().min(1),
 });
 
+const hostnameField = z
+	.string()
+	.min(3)
+	.transform(normalizeHostname)
+	.refine(isValidHostname, { message: "Enter a valid domain name such as example.com" });
+
 export const firstRunRegisterSchema = z
 	.object({
-		domain: z.string().min(3),
+		domain: hostnameField,
 		enableSending: z.boolean().optional(),
 		replaceMxRecords: z.boolean().optional(),
 		skipDns: z.boolean().optional(),
@@ -74,11 +83,13 @@ export const primaryDomainRegisterSchema = z.object({
 });
 
 export const setupDomainSchema = z.object({
-	hostname: z.string().min(3),
+	hostname: hostnameField,
+	/** Record the domain without looking it up on Cloudflare. The operator sets DNS by hand. */
+	skipDns: z.boolean().optional(),
 });
 
 export const addDomainSchema = z.object({
-	hostname: z.string().min(3),
+	hostname: hostnameField,
 	enableRouting: z.boolean().optional(),
 	enableSending: z.boolean().optional(),
 	replaceMxRecords: z.boolean().optional(),
@@ -91,7 +102,7 @@ export const addDomainSchema = z.object({
 });
 
 export const loginSchema = z.object({
-	email: z.string().email(),
+	email: z.string().trim().toLowerCase().email(),
 	password: z.string().min(1),
 });
 
@@ -106,7 +117,7 @@ export const passwordResetConfirmSchema = z.object({
 
 /** `/api/auth/device`: either email + password, or a challenge + code after MFA. */
 export const deviceLoginSchema = z.union([
-	z.object({ email: z.string().trim().email(), password: z.string().min(1), deviceName: z.string().trim().min(1).max(100) }),
+	z.object({ email: z.string().trim().toLowerCase().email(), password: z.string().min(1), deviceName: z.string().trim().min(1).max(100) }),
 	z.object({ challengeToken: z.string().min(8).max(200), code: z.string().trim().min(6).max(32), deviceName: z.string().trim().min(1).max(100) }),
 ]);
 
@@ -139,6 +150,10 @@ export const stepUpActionSchema = z.enum([
 	"second_factor.toggle",
 	"admin.password_reset",
 	"admin.recovery_link",
+	"admin.forwarding_email",
+	"profile.recovery_email",
+	"routing.forward",
+	"webhook.change",
 ]);
 
 export const passkeyRegistrationSchema = passkeyCeremonySchema.extend({
@@ -216,13 +231,13 @@ export const mfaDisableSchema = z
 	.refine((value) => value.password || value.stepUpToken, { message: "Verify your identity first" });
 
 export const domainSchema = z.object({
-	hostname: z.string().min(3),
+	hostname: hostnameField,
 });
 
 export const mailboxSchema = z.object({
 	domainId: z.string().min(1),
 	ownerUserId: z.string().min(1).optional(),
-	localPart: z.string().min(1).max(64),
+	localPart: z.string().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/),
 	displayName: z.string().optional(),
 	type: z.enum(["personal", "shared"]).optional(),
 });
@@ -245,7 +260,7 @@ export const updateManagedAccountSchema = z.object({
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().min(8).max(128).or(z.literal("")).optional().transform((value) => value || null),
 	),
-	/** Required when `password` is set: the administrator must re-authenticate. */
+	/** Required when `password` or `forwardingEmail` changes: the administrator must re-authenticate. */
 	stepUpToken: z.string().min(8).max(200).optional(),
 });
 
@@ -264,6 +279,34 @@ export const createMailboxAliasSchema = z.object({
 	domainId: z.string().min(1),
 	localPart: z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9._%+-]+$/)
 		.transform((value) => value.toLowerCase()),
+});
+
+// The aliases endpoint additionally accepts a label, a masked flag, and
+// `generate` to mint a random masked address without a client-chosen local part.
+// Labels become outbound display names, so control and format characters that
+// could corrupt headers are refused.
+const aliasLabelSchema = z.string().trim().max(100).regex(/^[^\p{Cc}\p{Cf}]*$/u);
+
+export const mailboxAliasBodySchema = createMailboxAliasSchema
+	.partial({ localPart: true })
+	.extend({
+		label: aliasLabelSchema.optional(),
+		masked: z.boolean().default(false),
+		generate: z.boolean().default(false),
+	})
+	.refine((value) => value.generate || !!value.localPart, {
+		message: "Enter an alias username or request a generated address",
+	})
+	// A local part made only of dots or a +tag normalizes to nothing: inbound
+	// routing could never match it, so the alias would be unreachable.
+	.refine((value) => !value.localPart || normalizeRecipientLocalPart(value.localPart).length > 0, {
+		message: "Alias username needs at least one letter or digit outside dots and +tags",
+	});
+
+export const updateMailboxAliasSchema = z.object({
+	aliasId: z.string().min(1),
+	label: aliasLabelSchema.nullable().optional(),
+	enabled: z.boolean().optional(),
 });
 
 export const createUserAccountSchema = z.object({
@@ -317,8 +360,17 @@ export const folderSchema = z.object({
 	color: z.enum(FOLDER_COLOR_VALUES).default(DEFAULT_FOLDER_COLOR),
 });
 
+/** Proof of identity for changing where password-reset or forwarded mail goes. */
+const recoveryProofFields = {
+	password: z.string().min(1).max(1024).optional(),
+	stepUpToken: z.string().min(8).max(200).optional(),
+	code: z.string().trim().min(6).max(32).optional(),
+};
+
 export const updateProfileSchema = z.object({
-	name: z.string().trim().min(1).max(100),
+	...recoveryProofFields,
+	// Optional so a recovery-email-only save leaves the name alone instead of writing back a stale one.
+	name: z.string().trim().min(1).max(100).optional(),
 	resetEmail: z.preprocess(
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().email().or(z.literal("")).transform((value) => value || null),
@@ -330,6 +382,7 @@ export const updateProfileSchema = z.object({
 });
 
 export const updateForwardingEmailSchema = z.object({
+	...recoveryProofFields,
 	forwardingEmail: z.preprocess(
 		(value) => (typeof value === "string" ? value.trim() : value),
 		z.string().email().or(z.literal("")).transform((value) => value || null),
@@ -366,6 +419,7 @@ export const changePasswordSchema = z.object({
 });
 
 export const routingRuleSchema = z.object({
+	...recoveryProofFields,
 	domainId: z.string().optional(),
 	pattern: z.string().trim().min(1).max(200).optional(),
 	matchField: z.enum(["email", "content", "title"]).default("email"),
@@ -382,6 +436,7 @@ export const routingRuleSchema = z.object({
 
 export const domainRoutingRuleSchema = z
 	.object({
+		...recoveryProofFields,
 		domainId: z.string().min(1),
 		name: z.string().trim().max(120).optional(),
 		enabled: z.boolean().default(true),
@@ -435,6 +490,7 @@ export const domainRoutingRuleSchema = z
 	});
 
 export const webhookSchema = z.object({
+	...recoveryProofFields,
 	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE),
 	description: z.string().trim().max(200).optional(),
 	events: z
@@ -445,6 +501,7 @@ export const webhookSchema = z.object({
 });
 
 export const webhookUpdateSchema = z.object({
+	...recoveryProofFields,
 	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE).optional(),
 	description: z.string().trim().max(200).nullish(),
 	events: z

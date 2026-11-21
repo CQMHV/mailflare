@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
+import { authUserColumns } from "@/lib/auth/session";
 import { mfaVerifySchema } from "@/lib/validators";
 import { allowLoginAttempt } from "@/lib/auth/rate-limit";
 import { readJsonBody } from "@/lib/http/request";
@@ -9,6 +10,7 @@ import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { recordAuthActivity } from "@/lib/auth/activity";
 import { consumeLoginChallenge, getLoginChallengeUserId } from "@/lib/auth/login-challenge";
 import { verifySecondFactor } from "@/lib/auth/mfa";
+import { clearSecondFactorAttempt, reserveSecondFactorAttempt } from "@/lib/auth/second-factor-attempts";
 import { completeLogin } from "@/lib/auth/login-response";
 import { authError } from "@/lib/http/auth-error";
 
@@ -24,7 +26,7 @@ export async function POST(request: Request) {
 	}
 	const parsed = mfaVerifySchema.safeParse(body);
 	if (!parsed.success) return authError("invalid_request", 400);
-	// Codes are six digits; the login limiter is what stops brute force.
+	// The per-IP login limiter slows guessing; the per-account attempt limit below caps it.
 	if (!(await allowLoginAttempt(env, request))) {
 		return authError("rate_limited", 429, { "Retry-After": "60" });
 	}
@@ -32,10 +34,13 @@ export async function POST(request: Request) {
 	const userId = await getLoginChallengeUserId(env, parsed.data.challengeToken);
 	if (!userId) return authError("passkey_expired", 401);
 	const db = getDb(env);
-	const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+	const [user] = await db.select(authUserColumns).from(users).where(eq(users.id, userId)).limit(1);
 	if (!user || user.disabled || user.deletedAt) return authError("account_disabled", 403);
+	const attempt = await reserveSecondFactorAttempt(env, user.id, request);
+	if (!attempt) return authError("rate_limited", 429, { "Retry-After": "900" });
 	const method = await verifySecondFactor(env, user, parsed.data.code);
 	if (!method) return authError("code_mismatch", 401);
+	await clearSecondFactorAttempt(env, attempt);
 	if (!(await consumeLoginChallenge(env, parsed.data.challengeToken))) {
 		return authError("passkey_expired", 401);
 	}

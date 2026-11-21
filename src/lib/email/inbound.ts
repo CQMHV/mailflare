@@ -9,8 +9,10 @@ import { dispatchWebhooks } from "@/lib/email/webhooks";
 import { getMessageContactNames, upsertContactFromAddress } from "@/lib/contacts/service";
 import { getEmailAddress } from "@/lib/email/address";
 import { sendMailboxAutoReply } from "@/lib/email/auto-reply";
+import { isOthersDraft } from "@/lib/email/draft-access";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { listMessageAttachments, storeMessageAttachments } from "@/lib/email/attachments";
+import { registerInboundInvite } from "@/lib/calendar/invite-store";
 import { inboundAttachmentLimitReason } from "@/lib/email/inbound-attachments";
 import { inboundMessageId } from "@/lib/email/inbound-id";
 import { extractUnsubscribeLinkFromBody, extractUnsubscribeUrlFromRaw, getUnsubscribeUrlFromRawR2Key } from "@/lib/email/unsubscribe";
@@ -28,6 +30,7 @@ import {
 	notifyUsersOfNewMessage,
 } from "@/lib/realtime/utils";
 import { scheduleAutoDraft } from "@/lib/agent/jobs/utils";
+import { buildNewMessageNotification } from "@/lib/email/inbound-notification";
 
 export type InboundQueueMessage = {
 	from: string;
@@ -63,14 +66,8 @@ export async function processInboundMessage(
 		return;
 	}
 
-	// A forward decision only reaches the queue when the rule keeps a copy; without a
-	// destination mailbox there is nothing to store.
-	if (decision.action === "forward" && !decision.keepCopy) {
-		console.info(`Forward ${payload.to} -> ${decision.forwardTo}`);
-		await dropRaw();
-		return;
-	}
-
+	// A forward decision reaches the queue when the rule keeps a copy or the forward
+	// failed; either way it is stored if there is a mailbox to store it in.
 	if (!decision.mailbox) {
 		await dropRaw();
 		return;
@@ -220,6 +217,9 @@ export async function processInboundMessage(
 		if (!inserted.length) return;
 
 		await storeMessageAttachments(env, messageId, parsed.attachments);
+		if (status !== "spam" && status !== "trash") {
+			await registerInboundInvite(env, { userId: decision.mailbox.userId, mailboxId: decision.mailbox.mailboxId, messageId, senderAddress: fromAddr, attachments: parsed.attachments });
+		}
 		if (spamAnalysis) {
 			try {
 				await recordReputationObservation(env, decision.mailbox.mailboxId, getReputationKeys(parsed, spamAnalysis.fingerprint));
@@ -261,14 +261,13 @@ export async function processInboundMessage(
 			decision.mailbox.mailboxId,
 			decision.mailbox.userId,
 		);
-		await notifyUsersOfNewMessage(env, notificationUserIds, {
-			type: "new_message",
+		await notifyUsersOfNewMessage(env, notificationUserIds, buildNewMessageNotification({
 			messageId,
 			mailboxId: decision.mailbox.mailboxId,
-			from: fromAddr,
-			fromName: contact?.displayName ?? null,
+			fromAddr,
+			contact,
 			subject: parsed.subject,
-		});
+		}));
 	}
 	// Spam and blocked mail carry an unauthenticated From; consumers acting on it would be fooled.
 	if (status !== "spam" && status !== "trash") {
@@ -333,13 +332,10 @@ export async function getMessageWithBody(env: CloudflareEnv, userId: string, mes
 export async function getMessageWithBodyForUser(env: CloudflareEnv, user: SessionUser, messageId: string) {
 	const db = getDb(env);
 	const [message] = await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
-	if (!message?.mailboxId) return null;
+	if (!message?.mailboxId || isOthersDraft(message, user.id)) return null;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return null;
-	const [contactNames, attachments, unsubscribe, [scheduledJob]] = await Promise.all([
-		getMessageContactNames(env, message.userId, message.fromAddr, message.toAddr),
-		listMessageAttachments(env, messageId),
-		getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key),
+	const [scheduledJob, contactNames, attachments, unsubscribe] = await Promise.all([
 		message.direction === "outbound" && message.status === "queued"
 			? db
 				.select({ scheduledAt: outboundJobs.scheduledAt })
@@ -347,6 +343,9 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 				.where(and(eq(outboundJobs.messageId, messageId), eq(outboundJobs.status, "queued"), isNotNull(outboundJobs.scheduledAt)))
 				.limit(1)
 			: Promise.resolve([]),
+		getMessageContactNames(env, message.userId, message.fromAddr, message.toAddr),
+		listMessageAttachments(env, messageId),
+		getUnsubscribeUrlFromRawR2Key(env, message.rawR2Key),
 	]);
 	const { rawR2Key, textBody, htmlBody, ...header } = message;
 	void rawR2Key;
@@ -356,18 +355,18 @@ export async function getMessageWithBodyForUser(env: CloudflareEnv, user: Sessio
 		attachments,
 		unsubscribeUrl: unsubscribe?.url ?? null,
 		unsubscribeViaBody: unsubscribe ? null : extractUnsubscribeLinkFromBody(htmlBody, textBody),
-		scheduledAt: scheduledJob?.scheduledAt?.toISOString() ?? null,
+		scheduledAt: scheduledJob[0]?.scheduledAt?.toISOString() ?? null,
 	};
 }
 
 export async function getMessageMetadataForUser(env: CloudflareEnv, user: SessionUser, messageId: string) {
 	const db = getDb(env);
 	const [message] = await db
-		.select({ mailboxId: messages.mailboxId, rawR2Key: messages.rawR2Key, htmlBody: messages.htmlBody, textBody: messages.textBody })
+		.select({ mailboxId: messages.mailboxId, rawR2Key: messages.rawR2Key, htmlBody: messages.htmlBody, textBody: messages.textBody, status: messages.status, privateDraft: messages.privateDraft, userId: messages.userId })
 		.from(messages)
 		.where(eq(messages.id, messageId))
 		.limit(1);
-	if (!message?.mailboxId) return null;
+	if (!message?.mailboxId || isOthersDraft(message, user.id)) return null;
 	const access = await getMailboxAccessLevel(db, user, message.mailboxId);
 	if (!access?.canRead) return null;
 	const [attachments, unsubscribe] = await Promise.all([

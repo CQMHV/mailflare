@@ -169,16 +169,14 @@ The assistant panel no longer exposes MCP key management. External MCP clients c
 
 Push reviewed updates to the installation repository's `main` branch. Cloudflare Workers Builds automatically builds and deploys that branch. Preserve the installation settings and the differences listed in the README when updating from upstream. Wait for the Cloudflare deployment to finish before using the new release.
 
-Deployment and database migration are separate. **Admin settings** shows any pending database migrations. Select **Update database** to apply them through the Worker's D1 binding. The same runner initializes a new database during setup.
+Deployment and database migration are separate. **Admin settings** shows any pending database migrations. Select **Update database** to apply them through the Worker's D1 binding. The same runner initializes a new database during setup. Authenticator-code sign-in requires migration `0090_security_hardening.sql` to record used codes. An active administrator session can apply it from **Admin settings**.
 
 If the Cloudflare dashboard has a custom deploy command containing `wrangler d1 migrations apply DB --remote`, remove that part and use `npm run deploy`.
 
 Each migration and its `d1_migrations` history entry run in one D1 batch. If a migration fails, its changes are rolled back, the failed filename is shown, and it can be retried after the problem is corrected. Wrangler remains available as a manual recovery tool.
 
+If mail arrives after a deploy but before its migrations are applied and the new code needs a column or table that does not exist yet, the inbound queue retries that message every 5 minutes, up to 12 times (about an hour), instead of dropping it. Applying the migrations inside that hour from **Update database** delivers the held mail. Mail still failing after that is lost from the queue and its raw copy in R2 is deleted by the daily sweep, so apply migrations promptly after a deploy. The self-hosted Node server applies migrations at startup before it consumes mail, so it does not hit this.
+
 New application releases must remain compatible with the previous schema until an administrator applies their migrations. Prefer additive changes, keep old columns during the transition, and avoid making authentication or the admin settings page depend immediately on a newly added column. Plan a maintenance window for an incompatible schema change.
 
 When adding a schema change, create a new uniquely named SQL file in `drizzle/migrations` and do not edit an applied migration. Build and development commands generate the Worker migration bundle from those files. `npm run db:bundle` can generate it explicitly.
-
-## Branding license
-
-Activate a purchased Pro or Team key from **Admin → Licenses**. Mailflare sends the key to Paymug and stores only a one-way hash and the activation state. Apply all D1 migrations before activating a license.

@@ -25,7 +25,7 @@ const migrations = readdirSync(directory).filter((name) => name.endsWith(".sql")
 	number: Number.parseInt(name, 10),
 	sql: readFileSync(join(directory, name), "utf8"),
 }));
-const addedTables = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "user_compose_preferences", "passkey_credentials"];
+const addedTables = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "user_compose_preferences", "passkey_credentials", "conversation_notes", "booking_confirmation_templates", "calendar_event_overrides", "calendar_occurrence_responses", "calendar_invite_tombstones"];
 
 function database(context, through = Infinity) {
 	const db = new SqliteDatabase();
@@ -71,10 +71,10 @@ for (const version of [1, 2]) {
 		const restored = database(context);
 		await restoreDatabaseRecords(restored, encode(document));
 		assert.deepEqual(records(restored, "users"), records(old, "users").map((user) => ({
-			...user, require_second_factor: 0, passkey_count: 0, security_version: 0, calendar_enabled: 1, drive_enabled: 1,
+			...user, require_second_factor: 0, passkey_count: 0, security_version: 0, calendar_enabled: 1, drive_enabled: 1, totp_last_step: null,
 		})));
 		for (const table of ["domains", "mailboxes"]) assert.deepEqual(records(restored, table), records(old, table));
-		assert.deepEqual(records(restored, "messages"), records(old, "messages").map((message) => ({ ...message, has_unsubscribe: 0 })));
+		assert.deepEqual(records(restored, "messages"), records(old, "messages").map((message) => ({ ...message, has_unsubscribe: 0, invite_response: null, private_draft: 1 })));
 		for (const table of addedTables) assert.deepEqual(records(restored, table), []);
 		assert.deepEqual(restored.db.prepare("PRAGMA foreign_key_check").all(), []);
 	});
@@ -92,6 +92,10 @@ test("new persisted records round-trip in foreign-key order while import jobs re
 		INSERT INTO passkey_credentials (id, user_id, credential_id, credential_hash, public_key, counter, device_type, backed_up, name, created_at)
 		VALUES ('passkey', 'user', 'credential', 'credential-hash', 'public-key', 0, 'singleDevice', 0, 'Passkey', 1);
 		UPDATE users SET password_hash = '!passkey-only' WHERE id = 'user';
+		INSERT INTO calendar_events (id, user_id, title, starts_at, ends_at, created_at, updated_at) VALUES ('event', 'user', 'Meeting', 10, 20, 1, 1);
+		INSERT INTO calendar_event_overrides (id, event_id, occurrence_ms, starts_at, ends_at, created_at, updated_at) VALUES ('override', 'event', 10, 11, 21, 1, 1);
+		INSERT INTO calendar_occurrence_responses (id, event_id, occurrence_ms, guest, status, updated_at) VALUES ('response', 'event', 10, 'guest@example.net', 'accepted', 1);
+		INSERT INTO calendar_invite_tombstones (id, user_id, cancelled_at) VALUES ('tombstone', 'user', 1);
 		INSERT INTO import_jobs (id, user_id, mailbox_id, kind, label, spec, created_at, updated_at)
 		VALUES ('job', 'user', 'mailbox', 'imap', 'Import', '{}', 1, 1);
 	`);

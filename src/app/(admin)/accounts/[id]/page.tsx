@@ -9,6 +9,8 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import { Label } from "@/components/ui/label";
+import { useSecurityStatus } from "@/components/settings/security-status-store";
+import { StepUpDialog } from "@/components/settings/step-up-dialog";
 import type { ManagedAccount } from "./types";
 import {
 	fetchManagedAccount,
@@ -17,6 +19,11 @@ import {
 	uploadManagedAccountAvatar,
 } from "./utils";
 
+/** The server stores a blank address as none, so "" and null are the same saved value. */
+function normalizeForwarding(value: string | null | undefined): string | null {
+	return value?.trim() || null;
+}
+
 export default function AccountDetailsPage() {
 	const { t } = useLanguage();
 	const { id } = useParams<{ id: string }>();
@@ -24,19 +31,33 @@ export default function AccountDetailsPage() {
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState<string | null>(null);
 	const [avatarVersion, setAvatarVersion] = useState(0);
+	// The address as stored: changing it asks the administrator to confirm it is them.
+	const [savedForwarding, setSavedForwarding] = useState<string | null>(null);
+	const [confirmingForwarding, setConfirmingForwarding] = useState(false);
+	const { status: securityStatus } = useSecurityStatus();
 
 	useEffect(() => {
 		void fetchManagedAccount(id)
-			.then(setAccount)
+			.then((loaded) => {
+				setAccount(loaded);
+				setSavedForwarding(normalizeForwarding(loaded.forwardingEmail));
+			})
 			.catch((error) => setMessage(error instanceof Error ? error.message : t("account.loadFailed")));
 	}, [id, t]);
 
-	async function saveDetails() {
+	function onSave() {
+		if (!account) return;
+		if (normalizeForwarding(account.forwardingEmail) !== savedForwarding) setConfirmingForwarding(true);
+		else void saveDetails();
+	}
+
+	async function saveDetails(stepUpToken?: string) {
 		if (!account) return;
 		setSaving(true);
 		setMessage(null);
 		try {
-			await saveManagedAccount(account);
+			await saveManagedAccount(account, stepUpToken);
+			setSavedForwarding(normalizeForwarding(account.forwardingEmail));
 			setMessage(t("account.updated"));
 		} catch (error) {
 			setMessage(error instanceof Error ? error.message : t("account.updateFailed"));
@@ -95,20 +116,22 @@ export default function AccountDetailsPage() {
 					<Label htmlFor="account-name">{t("common.name")}</Label>
 					<Input id="account-name" value={account.name} disabled={!account.editable} onChange={(event) => setAccount({ ...account, name: event.target.value })} />
 				</div>
-				<div className="space-y-2">
-					<Label htmlFor="forwarding-email">{t("account.forwardingOptional")}</Label>
-					<Input
-						id="forwarding-email"
-						type="email"
-						value={account.forwardingEmail ?? ""}
-						disabled={!account.editable}
-						onChange={(event) => setAccount({ ...account, forwardingEmail: event.target.value || null })}
-						placeholder="destination@example.com"
-					/>
-					<p className="text-xs leading-5 text-neutral-500">
-						{t("settings.forwarding.hint")}
-					</p>
-				</div>
+				{account.forwardingEmail !== undefined && (
+					<div className="space-y-2">
+						<Label htmlFor="forwarding-email">{t("account.forwardingOptional")}</Label>
+						<Input
+							id="forwarding-email"
+							type="email"
+							value={account.forwardingEmail ?? ""}
+							disabled={!account.editable}
+							onChange={(event) => setAccount({ ...account, forwardingEmail: event.target.value || null })}
+							placeholder="destination@example.com"
+						/>
+						<p className="text-xs leading-5 text-neutral-500">
+							{t("settings.forwarding.hint")}
+						</p>
+					</div>
+				)}
 				<div className="flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
 					<div className="space-y-1">
 						<Label htmlFor="account-enabled" className="font-semibold text-neutral-900">{t("account.enabled")}</Label>
@@ -125,11 +148,25 @@ export default function AccountDetailsPage() {
 					/>
 				</div>
 				{account.editable && (
-					<Button onClick={() => void saveDetails()} disabled={saving || !account.name.trim()}>
+					<Button onClick={onSave} disabled={saving || !account.name.trim()}>
 						{saving ? t("common.saving") : t("account.saveDetails")}
 					</Button>
 				)}
 			</section>
+			<StepUpDialog
+				open={confirmingForwarding}
+				hasPassword={securityStatus?.passwordSet ?? true}
+				hasPasskey={(securityStatus?.passkeys.length ?? 0) > 0}
+				requireSecondFactor={securityStatus?.requireSecondFactor ?? false}
+				totpEnabled={securityStatus?.totpEnabled ?? false}
+				action="admin.forwarding_email"
+				targetUserId={id}
+				onOpenChange={setConfirmingForwarding}
+				onAuthorized={async (token) => {
+					await saveDetails(token);
+					setConfirmingForwarding(false);
+				}}
+			/>
 			{message && <p role="status" className="text-sm text-neutral-500">{message}</p>}
 		</div>
 	);

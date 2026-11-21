@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
+import { authUserColumns } from "@/lib/auth/session";
 import { allowLoginAttempt } from "@/lib/auth/rate-limit";
 import { readJsonBody } from "@/lib/http/request";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
 	if (!binding) return authError("passkey_expired", 401);
 	const userId = await getLoginChallengeUserId(env, parsed.data.challengeToken);
 	if (!userId) return authError("passkey_expired", 401);
-	const [user] = await getDb(env).select().from(users).where(eq(users.id, userId)).limit(1);
+	const [user] = await getDb(env).select(authUserColumns).from(users).where(eq(users.id, userId)).limit(1);
 	if (!user || user.disabled || user.deletedAt) return authError("account_disabled", 403);
 
 	const challenge = await consumeWebAuthnChallenge(env, {

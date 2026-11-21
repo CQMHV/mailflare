@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
+import { authUserColumns } from "@/lib/auth/session";
 import { verifyPassword } from "@/lib/auth/password";
 import { loginSchema } from "@/lib/validators";
 import { allowLoginAttempt } from "@/lib/auth/rate-limit";
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
 	}
 
 	const db = getDb(env);
-	const [user] = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
+	const [user] = await db.select(authUserColumns).from(users).where(eq(users.email, parsed.data.email)).limit(1);
 	// A passwordless account has no usable password; it still takes the same
 	// generic error so the response cannot be used to enumerate accounts.
 	if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {

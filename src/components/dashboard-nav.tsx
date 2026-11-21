@@ -4,7 +4,7 @@ import type { FormEvent } from "react";
 import { useLanguage } from "./language-provider";
 import { folderColorKeys } from "@/lib/folders/color-keys";
 import type { TranslationKey } from "@/lib/i18n/types";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import {
   Archive,
@@ -82,6 +82,10 @@ const MAX_VISIBLE_FOLDERS = 3;
 const MORE_OPEN_KEY = "mailflare:nav:more-open";
 const FOLDERS_OPEN_KEY = "mailflare:nav:folders-open";
 
+const subscribeNothing = () => () => {};
+const hydratedOnClient = () => true;
+const hydratedOnServer = () => false;
+
 function NavToggle({ expanded, onClick, collapsedLabel, expandedLabel }: { expanded: boolean; onClick: () => void; collapsedLabel?: string; expandedLabel?: string }) {
   const { t } = useLanguage();
   return (
@@ -100,17 +104,27 @@ export function DashboardNav({ className }: { className?: string }) {
   const { t } = useLanguage();
   const { minimal, mobile } = useSidebar();
   const pathname = usePathname();
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [foldersOpen, setFoldersOpen] = useState(false);
+  // Storage is read after hydration so the server and first client render agree.
+  const hydrated = useSyncExternalStore(subscribeNothing, hydratedOnClient, hydratedOnServer);
+  const [moreOpenChoice, setMoreOpen] = useState<boolean | null>(null);
+  const [foldersOpenChoice, setFoldersOpen] = useState<boolean | null>(null);
+  const moreOpen = moreOpenChoice ?? (hydrated && readStorage(MORE_OPEN_KEY, false));
+  const foldersOpen = foldersOpenChoice ?? (hydrated && readStorage(FOLDERS_OPEN_KEY, false));
   const [foldersSectionOpen, toggleFoldersSection] = useSectionOpen("mailflare:nav:folders-section-open");
   const { selectedMailbox, isLoading } = useSelectedMailbox();
   const { counts } = useMessageCounts(selectedMailbox?.id, !isLoading);
   const [folders, setFolders] = useState<CustomFolder[]>([]);
+  const [foldersMailboxId, setFoldersMailboxId] = useState(selectedMailbox?.id);
+  if (foldersMailboxId !== selectedMailbox?.id) {
+    setFoldersMailboxId(selectedMailbox?.id);
+    if (!selectedMailbox?.id) setFolders([]);
+  }
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderColor, setNewFolderColor] =
     useState<FolderColor>(DEFAULT_FOLDER_COLOR);
   const [addingFolder, setAddingFolder] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [folderError, setFolderError] = useState<string | null>(null);
   const linksWithCounts: NavLink[] = links.filter((link) => link.href !== "/scheduled" || counts.folders.scheduled.total > 0).map(({ labelKey, ...rest }): NavLink => {
     const link = { ...rest, label: t(labelKey) };
     if (link.href === "/inbox") {
@@ -159,11 +173,6 @@ export function DashboardNav({ className }: { className?: string }) {
   });
 
   useEffect(() => {
-    setMoreOpen(readStorage(MORE_OPEN_KEY, false));
-    setFoldersOpen(readStorage(FOLDERS_OPEN_KEY, false));
-  }, []);
-
-  useEffect(() => {
     const reset = () => setFolders([]);
     window.addEventListener(AUTH_SESSION_CHANGED_EVENT, reset);
     return () => window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, reset);
@@ -188,10 +197,7 @@ export function DashboardNav({ className }: { className?: string }) {
   const foldersOverflow = !minimal && folders.length > MAX_VISIBLE_FOLDERS;
 
   useEffect(() => {
-    if (!selectedMailbox?.id) {
-      setFolders([]);
-      return;
-    }
+    if (!selectedMailbox?.id) return;
 
     let cancelled = false;
     getMailboxFolders<{ folders?: CustomFolder[] }>(selectedMailbox.id)
@@ -212,6 +218,7 @@ export function DashboardNav({ className }: { className?: string }) {
     if (!selectedMailbox?.id || !newFolderName.trim()) return;
 
     setAddingFolder(true);
+    setFolderError(null);
     try {
       const response = await authFetch("/api/folders", {
         method: "POST",
@@ -222,7 +229,11 @@ export function DashboardNav({ className }: { className?: string }) {
           color: newFolderColor,
         }),
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+        setFolderError(typeof body?.error === "string" ? body.error : t("navigation.createFolderFailed"));
+        return;
+      }
       const folder = (await response.json()) as CustomFolder;
       invalidateFolderCache();
       setFolders((items) =>
@@ -231,6 +242,8 @@ export function DashboardNav({ className }: { className?: string }) {
       setNewFolderName("");
       setNewFolderColor(DEFAULT_FOLDER_COLOR);
       setFolderDialogOpen(false);
+    } catch {
+      setFolderError(t("auth.serverUnreachable"));
     } finally {
       setAddingFolder(false);
     }
@@ -257,7 +270,7 @@ export function DashboardNav({ className }: { className?: string }) {
       {!minimal && (
         <NavSectionHeader label={t("navigation.folders")} open={foldersSectionOpen} onToggle={toggleFoldersSection}>
           {selectedMailbox && (
-            <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+            <Dialog open={folderDialogOpen} onOpenChange={(open) => { setFolderDialogOpen(open); if (!open) setFolderError(null); }}>
               <DialogTrigger asChild>
                 <button
                   type="button"
@@ -311,6 +324,7 @@ export function DashboardNav({ className }: { className?: string }) {
                       ))}
                     </div>
                   </div>
+                  {folderError && <p role="alert" className="text-sm text-red-600">{folderError}</p>}
                   <Button
                     type="submit"
                     disabled={addingFolder || !newFolderName.trim()}

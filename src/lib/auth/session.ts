@@ -1,4 +1,4 @@
-import { and, eq, gt, ne } from "drizzle-orm";
+import { and, eq, getTableColumns, gt, ne } from "drizzle-orm";
 import { revokeAllDeviceKeys } from "@/lib/auth/device-keys";
 import { newId } from "@/lib/ids";
 import { getDb } from "@/db";
@@ -6,6 +6,12 @@ import { sessions, users } from "@/db/schema";
 
 export const SESSION_COOKIE = "ep_session";
 const SESSION_DAYS = 30;
+
+// The replay counter is used only when verifying TOTP. Keeping it out of auth reads
+// keeps the migration controls available to a signed-in administrator.
+// eslint-disable-next-line no-unused-vars -- Destructure the column out of the shared projection.
+const { totpLastStep, ...authUserColumns } = getTableColumns(users);
+export { authUserColumns };
 
 export function generateSessionToken(): string {
 	return newId("sess");
@@ -38,11 +44,12 @@ export async function createSession(env: CloudflareEnv, userId: string): Promise
 export async function getUserFromSession(
 	env: CloudflareEnv,
 	token: string | undefined,
-): Promise<typeof users.$inferSelect | null> {
+): Promise<Omit<typeof users.$inferSelect, "totpLastStep"> | null> {
 	const session = await getSessionFromToken(env, token);
 	if (!session) return null;
-	const db = getDb(env);
-	const [user] = await db.select().from(users).where(eq(users.id, session.userId)).limit(1);
+	// Same reason as below: `disabled` must be seen as soon as another admin writes it.
+	const db = getDb({ DB: env.DB_PRIMARY ?? env.DB });
+	const [user] = await db.select(authUserColumns).from(users).where(eq(users.id, session.userId)).limit(1);
 	return user ?? null;
 }
 
@@ -51,7 +58,9 @@ export async function getSessionFromToken(
 	token: string | undefined,
 ): Promise<typeof sessions.$inferSelect | null> {
 	if (!token) return null;
-	const db = getDb(env);
+	// Authentication always reads the primary: a read-replica session could still honor a
+	// session another device just revoked — no bookmark covers other clients' writes.
+	const db = getDb({ DB: env.DB_PRIMARY ?? env.DB });
 	const tokenHash = await hashSessionToken(token);
 	const [session] = await db
 		.select()

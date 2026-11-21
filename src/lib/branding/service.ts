@@ -10,7 +10,7 @@ export const BRANDING_ICON_KEY = "branding/app-icon";
 export async function getBranding(env: CloudflareEnv): Promise<Branding> {
 	try {
 		const [settings] = await getDb(env)
-			.select()
+			.select({ appName: appSettings.appName, iconKey: appSettings.iconKey })
 			.from(appSettings)
 			.where(eq(appSettings.id, APP_SETTINGS_ID))
 			.limit(1);

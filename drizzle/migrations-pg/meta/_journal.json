@@ -57,6 +57,69 @@
       "when": 1793280378890,
       "tag": "0007_message_has_unsubscribe",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793280379890,
+      "tag": "0008_conversation_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793280380890,
+      "tag": "0009_calendar_invitations",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793280381890,
+      "tag": "0010_booking_confirmation_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793280382890,
+      "tag": "0011_message_invite_response",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794516478572,
+      "tag": "0012_message_action_undo_claims",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794516479572,
+      "tag": "0013_auto_update",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794516479573,
+      "tag": "0014_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794516479576,
+      "tag": "0015_masked_aliases",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795027621043,
+      "tag": "0016_calendar_invite_complete",
+      "breakpoints": true
     }
   ]
 }

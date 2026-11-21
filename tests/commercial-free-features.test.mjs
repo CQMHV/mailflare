@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -15,6 +15,7 @@ await build({
 			export { applyMigrations } from "./server/runtime/migrate.ts";
 			export { getDb } from "./src/db/index.ts";
 			export { createSession } from "./src/lib/auth/session.ts";
+			export { createStepUpGrant } from "./src/lib/auth/webauthn/grants.ts";
 			export { generateApiKey } from "./src/lib/api-keys.ts";
 			export { GET as accountList, POST as accountCreate } from "./src/app/api/accounts/route.ts";
 			export { GET as accountDetail, PATCH as accountUpdate } from "./src/app/api/accounts/[id]/route.ts";
@@ -25,6 +26,7 @@ await build({
 			export { PATCH as forwardingUpdate } from "./src/app/api/settings/forwarding/route.ts";
 			export { PATCH as profileUpdate } from "./src/app/api/settings/profile/route.ts";
 			export { GET as authMe } from "./src/app/api/auth/me/route.ts";
+			export { GET as checkMigrations, POST as migrate } from "./src/app/api/admin/migrations/route.ts";
 			export { getAccountForwardingDestination } from "./src/lib/email/account-forwarding.ts";
 			export { GET as mailboxList, POST as mailboxCreate } from "./src/app/api/mailboxes/route.ts";
 			export { GET as apiMailboxList, POST as apiMailboxCreate } from "./src/app/api/v1/mailboxes/route.ts";
@@ -60,11 +62,11 @@ class MemoryBucket {
 	}
 }
 
-async function fixture(t) {
+async function fixture(t, migrationsDir = join(root, "drizzle/migrations")) {
 	const database = new SqliteDatabase(":memory:", { forbidLicenseQueries: true });
 	t.after(() => database.db.close());
 	t.after(() => assert.equal(database.forbiddenQueries.length, 0, "runtime must never consult licensing, even when an error is swallowed"));
-	await app.applyMigrations(database, join(root, "drizzle/migrations"));
+	await app.applyMigrations(database, migrationsDir);
 	database.db.exec(`
 		INSERT INTO users (id,email,password_hash,name,role,created_by_user_id,is_primary_admin,can_manage_users,can_manage_domains,can_manage_mailboxes,created_at) VALUES
 			('admin','owner@one.test','hash','Owner','admin',NULL,1,1,1,1,1),
@@ -108,7 +110,11 @@ async function fixture(t) {
 			method, headers, ...(body !== undefined ? { body: body instanceof FormData ? body : JSON.stringify(body) } : {}),
 		});
 	}
-	return { database, env, db: app.getDb(env), request };
+	function stepUp(userId, action, targetUserId) {
+		const { security_version: expectedActorSecurityVersion } = database.db.prepare("SELECT security_version FROM users WHERE id=?").get(userId);
+		return app.createStepUpGrant(env, { userId, sessionToken: sessions[userId], action, targetUserId, expectedActorSecurityVersion });
+	}
+	return { database, env, db: app.getDb(env), request, stepUp };
 }
 
 const accountUpdate = overrides => ({ name: "Updated member", role: "user", disabled: false, canManageMailboxes: true, ...overrides });
@@ -123,7 +129,9 @@ test("no-license account management keeps session roles and primary-admin protec
 	assert.equal(listing.accounts.length, 6);
 	assert.equal("seats" in listing, false);
 	assert.equal((await app.accountCreate(f.request("admin", "/api/accounts", "POST", accountCreate()))).status, 201);
-	assert.equal((await app.accountUpdate(f.request("admin", "/api/accounts/member", "PATCH", accountUpdate({ forwardingEmail: "archive@example.net" })), params("member"))).status, 200);
+	assert.equal((await app.accountUpdate(f.request("admin", "/api/accounts/member", "PATCH", accountUpdate({ forwardingEmail: "archive@example.net" })), params("member"))).status, 401);
+	const stepUpToken = await f.stepUp("admin", "admin.forwarding_email", "member");
+	assert.equal((await app.accountUpdate(f.request("admin", "/api/accounts/member", "PATCH", accountUpdate({ forwardingEmail: "archive@example.net", stepUpToken })), params("member"))).status, 200);
 	assert.equal(f.database.db.prepare("SELECT name,forwarding_email FROM users WHERE id='member'").get().forwarding_email, "archive@example.net");
 	const detail = await (await app.accountDetail(f.request("admin", "/api/accounts/member"), params("member"))).json();
 	assert.equal("canForwardEmail" in detail.account, false);
@@ -182,13 +190,15 @@ test("custom branding persists and serves its icon without a license; only prima
 
 test("ordinary users can configure their own forwarding without licensing and inbound lookup prevents loops", async t => {
 	const f = await fixture(t);
-	const response = await app.forwardingUpdate(f.request("member", "/api/settings/forwarding", "PATCH", { forwardingEmail: " inbox@example.net " }));
+	const forwarding = { forwardingEmail: " inbox@example.net " };
+	assert.equal((await app.forwardingUpdate(f.request("member", "/api/settings/forwarding", "PATCH", forwarding))).status, 401);
+	const response = await app.forwardingUpdate(f.request("member", "/api/settings/forwarding", "PATCH", { ...forwarding, stepUpToken: await f.stepUp("member", "profile.recovery_email") }));
 	assert.equal(response.status, 200);
 	assert.deepEqual(await response.json(), { forwardingEmail: "inbox@example.net" });
 	assert.equal(await app.getAccountForwardingDestination(f.env, "member@one.test"), "inbox@example.net");
 	assert.equal(await app.getAccountForwardingDestination(f.env, "missing@one.test"), null);
 	assert.equal(f.database.db.prepare("SELECT forwarding_email FROM users WHERE id='admin'").get().forwarding_email, null);
-	const profile = await app.profileUpdate(f.request("member", "/api/settings/profile", "PATCH", { name: "Member renamed", resetEmail: "", forwardingEmail: "MEMBER@one.test" }));
+	const profile = await app.profileUpdate(f.request("member", "/api/settings/profile", "PATCH", { name: "Member renamed", resetEmail: "", forwardingEmail: "MEMBER@one.test", stepUpToken: await f.stepUp("member", "profile.recovery_email") }));
 	assert.equal(profile.status, 200);
 	const profileBody = await profile.json();
 	assert.equal("canForwardEmail" in profileBody.user, false);
@@ -282,9 +292,28 @@ test("retained legacy commercial data has no runtime effect and disabled session
 	f.database.db.exec("INSERT INTO license_settings (id,instance_id,plan,state,seat_limit,updated_at) VALUES ('default','legacy','pro','inactive',1,1)");
 	assert.equal((await app.accountCreate(f.request("admin", "/api/accounts", "POST", accountCreate()))).status, 201);
 	assert.equal((await app.mailboxCreate(f.request("admin", "/api/mailboxes", "POST", mailboxInput()))).status, 200);
-	assert.equal((await app.forwardingUpdate(f.request("member", "/api/settings/forwarding", "PATCH", { forwardingEmail: "archive@example.net" }))).status, 200);
+	assert.equal((await app.forwardingUpdate(f.request("member", "/api/settings/forwarding", "PATCH", { forwardingEmail: "archive@example.net", stepUpToken: await f.stepUp("member", "profile.recovery_email") }))).status, 200);
 	f.database.db.exec("UPDATE users SET disabled=1 WHERE id='secondary'");
 	assert.equal((await app.accountList(f.request("secondary", "/api/accounts"))).status, 403);
 	assert.equal((await app.authMe(f.request("secondary", "/api/auth/me"))).status, 401);
 	assert.equal((await app.apiAccountList(f.request("secondary", "/api/v1/accounts", "GET", undefined, { api: true }))).status, 401);
+});
+
+test("a primary admin can use the dashboard migration route with the previous release schema", async t => {
+	const oldMigrations = mkdtempSync(join(directory, "previous-migrations-"));
+	const currentMigrations = join(root, "drizzle/migrations");
+	for (const file of readdirSync(currentMigrations)) {
+		if (file.endsWith(".sql") && Number.parseInt(file, 10) <= 83) copyFileSync(join(currentMigrations, file), join(oldMigrations, file));
+	}
+	const f = await fixture(t, oldMigrations);
+	const auth = await app.authMe(f.request("admin", "/api/auth/me"));
+	assert.equal(auth.status, 200);
+	assert.equal((await auth.json()).user.isPrimaryAdmin, true);
+	const route = "/api/admin/migrations";
+	const status = await app.checkMigrations(f.request("admin", route));
+	assert.equal(status.status, 200);
+	assert.ok((await status.json()).pending.includes("0090_security_hardening.sql"));
+	const result = await app.migrate(f.request("admin", route, "POST"));
+	assert.equal(result.status, 200, await result.clone().text());
+	assert.equal((await result.json()).ready, true);
 });

@@ -20,9 +20,9 @@ export async function preloadMailboxPage(href: string, mailboxId?: string, optio
 			read: "all",
 			limit: 25,
 			offset: 0,
-			group: options.grouped ? "thread" : undefined,
+			group: options.grouped && folder !== "drafts" ? "thread" : undefined,
 		},
 		customFolderMatch?.[1],
 	);
-	await fetchMessageList(params);
+	await fetchMessageList(params).catch(() => undefined);
 }

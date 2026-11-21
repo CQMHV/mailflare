@@ -32,17 +32,6 @@ export function cookieOptions(maxAge = COOKIE_MAX_AGE) {
 	};
 }
 
-/** Cross-site POSTs must not be able to switch or add accounts. */
-export function isSameOrigin(request: Request): boolean {
-	const origin = request.headers.get("Origin");
-	if (!origin) return true;
-	try {
-		return new URL(origin).host === new URL(request.url).host;
-	} catch {
-		return false;
-	}
-}
-
 export type AccountSummary = {
 	userId: string;
 	email: string;
@@ -58,7 +47,7 @@ export async function resolveAccounts(env: CloudflareEnv, tokens: string[]): Pro
 	const db = getDb(env);
 	const hashes = await Promise.all(tokens.map((token) => hashSessionToken(token)));
 	const rows = await db
-		.select({ tokenHash: sessions.tokenHash, user: users })
+		.select({ tokenHash: sessions.tokenHash, user: { id: users.id, email: users.email, name: users.name, avatarKey: users.avatarKey, disabled: users.disabled } })
 		.from(sessions)
 		.innerJoin(users, eq(users.id, sessions.userId))
 		.where(and(inArray(sessions.tokenHash, hashes), gt(sessions.expiresAt, new Date())));
